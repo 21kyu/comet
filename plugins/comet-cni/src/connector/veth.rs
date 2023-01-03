@@ -1,17 +1,14 @@
+use anyhow::Result;
+use network::{
+    add_addr, add_default_route, create_veth_pair, get_mac_addr, set_link_name, set_master,
+    set_netns, set_up,
+};
+use nix::sched;
 use std::fs::File;
 use std::os::fd::AsRawFd;
 use std::thread;
 
-use anyhow::Result;
-use nix::sched;
-
-use crate::{
-    ipam::{self, allocator::release_ip},
-    network::netlink::{
-        add_addr, add_default_route, create_veth_pair, get_mac_addr, set_link_name, set_master,
-        set_netns, set_up,
-    },
-};
+use crate::ipam::{self, allocator::release_ip};
 
 fn create_if_name(prefix: &str, cont_id: &str) -> Result<String> {
     Ok(match cont_id.len() < 5 {

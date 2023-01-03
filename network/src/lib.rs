@@ -1,10 +1,23 @@
-use std::net::Ipv4Addr;
-
 use anyhow::{bail, Error, Result};
 use lazy_static::lazy_static;
 use regex::Regex;
+use std::net::Ipv4Addr;
 
-use crate::run_command;
+macro_rules! run_command {
+    ($command:expr $(, $args:expr)*) => {
+        std::process::Command::new($command).args([$($args),*]).output()
+            .expect("failed to run command")
+    };
+}
+
+pub fn add_link(if_name: &str, link_type: &str) -> Result<()> {
+    let out = run_command!("ip", "link", "add", if_name, "type", link_type);
+
+    match out.status.success() {
+        true => Ok(()),
+        _ => Err(Error::msg(String::from_utf8(out.stderr).unwrap())),
+    }
+}
 
 pub fn create_veth_pair(host_if_name: &str, peer_if_name: &str) -> Result<()> {
     let out = run_command!(
@@ -125,8 +138,7 @@ pub fn get_ip_addr(if_name: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::network::netlink::{get_ip_addr, get_mac_addr};
-    use crate::run_command;
+    use crate::{get_ip_addr, get_mac_addr};
 
     #[test]
     fn get_mac_addr_test() {

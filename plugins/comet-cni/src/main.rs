@@ -2,7 +2,6 @@ pub mod command;
 pub mod connector;
 pub mod ipam;
 pub mod logging;
-pub mod network;
 
 use anyhow::{Error, Result};
 use serde::Deserialize;

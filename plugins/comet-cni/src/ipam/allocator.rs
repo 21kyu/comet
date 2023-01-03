@@ -1,3 +1,7 @@
+use anyhow::{bail, Result};
+use lazy_static::lazy_static;
+use network::get_ip_addr;
+use regex::Regex;
 use std::{
     collections::BTreeSet,
     fs::{self, File},
@@ -6,11 +10,7 @@ use std::{
     path::Path,
 };
 
-use anyhow::{bail, Result};
-use lazy_static::lazy_static;
-use regex::Regex;
-
-use crate::{network::netlink::get_ip_addr, run_command};
+use crate::run_command;
 
 pub const IP_STORE: &str = "/tmp/reserved_ips";
 
