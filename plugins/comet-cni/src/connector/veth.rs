@@ -1,5 +1,5 @@
 use anyhow::Result;
-use network::{
+use network::netlink::{
     add_addr, add_default_route, create_veth_pair, get_mac_addr, set_link_name, set_master,
     set_netns, set_up,
 };
@@ -65,8 +65,9 @@ pub fn release_veth(if_name: &str, netns: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use network::run_command;
+
     use crate::connector::veth::{create_if_name, setup_veth};
-    use crate::run_command;
 
     #[test]
     fn veth_test() {

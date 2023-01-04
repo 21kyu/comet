@@ -1,36 +1,13 @@
 use anyhow::{bail, Result};
-use lazy_static::lazy_static;
-use network::get_ip_addr;
-use regex::Regex;
+use network::{ip::nmap, netlink::get_ip_addr, run_command};
 use std::{
-    collections::BTreeSet,
     fs::{self, File},
     io::{self, BufRead, Write},
     net::Ipv4Addr,
     path::Path,
 };
 
-use crate::run_command;
-
 pub const IP_STORE: &str = "/tmp/reserved_ips";
-
-fn get_all_ips(subnet: &str) -> Result<BTreeSet<Ipv4Addr>> {
-    let out = run_command!("nmap", "-sL", subnet);
-
-    if let true = out.status.success() {
-        lazy_static! {
-            static ref RE: Regex = Regex::new(r"Nmap scan report for .*((\b25[0-5]|\b2[0-4][0-9]|\b[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3})").unwrap();
-        }
-
-        return Ok(RE
-            .captures_iter(&String::from_utf8(out.stdout)?)
-            .map(|cap| cap.get(1).map(|ip| ip.as_str()))
-            .map(|m| m.unwrap().parse::<Ipv4Addr>().unwrap())
-            .collect::<BTreeSet<_>>());
-    }
-
-    bail!("Failed to get all IPs")
-}
 
 fn read_lines<P>(path: P) -> Result<io::Lines<io::BufReader<File>>>
 where
@@ -58,7 +35,7 @@ pub fn allocate_ip(subnet: &str, ip_store_path: &str) -> Result<(Ipv4Addr, Ipv4A
         .open(ip_store_path)
         .unwrap();
 
-    let mut all_ips = get_all_ips(subnet)?;
+    let mut all_ips = nmap(subnet)?;
     let reserved_ips = get_reserved_ips(ip_store_path)?;
 
     for ip in reserved_ips {
@@ -90,17 +67,11 @@ pub fn release_ip(if_name: &str, ip_store_path: &str) -> Result<()> {
 mod tests {
     use std::fs;
 
-    use crate::{ipam::allocator::release_ip, run_command};
+    use network::run_command;
 
-    use super::{allocate_ip, get_all_ips, get_reserved_ips};
+    use crate::ipam::allocator::release_ip;
 
-    #[test]
-    fn get_all_ips_test() {
-        let subnet = "10.244.0.0/24";
-        let all_ips = get_all_ips(subnet).unwrap();
-
-        assert_eq!(all_ips.len(), 256)
-    }
+    use super::{allocate_ip, get_reserved_ips};
 
     #[test]
     fn get_reserved_ips_test() {

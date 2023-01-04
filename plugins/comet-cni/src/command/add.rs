@@ -67,7 +67,9 @@ pub fn add(cni_if_name: &str, container_id: &str, subnet: &str, netns: &str) -> 
 
 #[cfg(test)]
 mod tests {
-    use crate::{command::add::add, run_command};
+    use network::run_command;
+
+    use crate::command::add::add;
 
     #[test]
     fn add_test() {

@@ -90,15 +90,15 @@ mod tests {
         env::set_var("CNI_CONTAINERID", "123456789");
         env::set_var("CNI_IFNAME", "eth0");
 
-        let input = r###"
+        let input = r#"
         {
-            "cniVersion": "0.4.0",
+            "cniVersion": "0.3.1",
             "name": "comet",
             "type": "comet-cni",
             "network": "10.244.0.0/16",
             "subnet": "10.244.0.0/24"
         }
-        "###
+        "#
         .as_bytes();
 
         let opts = Opts::new(&input[..]).unwrap();
