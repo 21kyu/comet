@@ -1,0 +1,8 @@
+[package]
+name = "install"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.68"
+network = { version = "0.0.1", path = "../../network" }
