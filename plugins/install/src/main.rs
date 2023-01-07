@@ -5,6 +5,7 @@ use network::netlink::{add_addr, add_link, set_up};
 
 const BRIDGE_IF_NAME: &str = "cni0";
 const CNI_CONF_PATH: &str = "/etc/cni/net.d/08-comet.conf";
+const CNI_BIN_PATH: &str = "/opt/cni/bin/comet-cni";
 
 fn setup_bridge(bridge_ip: Ipv4Addr, subnet_mask_size: &str) -> Result<()> {
     add_link(BRIDGE_IF_NAME, "bridge")?;
@@ -28,5 +29,6 @@ fn main() {
         "subnet": "10.244.0.0/24"
     }"#;
 
+    fs::copy("comet-cni", CNI_BIN_PATH).unwrap();
     fs::write(CNI_CONF_PATH, net_conf).unwrap();
 }

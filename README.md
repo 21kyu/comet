@@ -1,6 +1,6 @@
 # comet
 
-Kubernetes CNI Plugin written with Rust
+Kubernetes CNI Plugin written with Rust. The main goal is to implement Comet agent using eBPF-based dataplane and WASM container.
 
 ## Comet components
 

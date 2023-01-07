@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: install
+  namespace: kube-system
+spec:
+  containers:
+    - name: install
+      image: 21kyu/comet:0.0.1
+      imagePullPolicy: Always
+      volumeMounts:
+        - mountPath: /opt/cni/bin
+          name: cni-bin
+        - mountPath: /etc/cni/net.d
+          name: cni-conf
+      resources:
+        requests:
+          cpu: 100m
+          memory: 50Mi
+        limits:
+          cpu: 100m
+          memory: 50Mi
+      securityContext:
+        capabilities:
+          add: ["NET_ADMIN", "NET_RAW"]
+        privileged: false
+  volumes:
+    - name: cni-bin
+      hostPath:
+        path: /opt/cni/bin
+        type: DirectoryOrCreate
+    - name: cni-conf
+      hostPath:
+        path: /etc/cni/net.d
+        type: DirectoryOrCreate
+  hostNetwork: true
+  tolerations:
+    - effect: NoSchedule
+      operator: Exists
+  restartPolicy: Never
