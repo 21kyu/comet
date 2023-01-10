@@ -1,13 +1,13 @@
-use std::net::Ipv4Addr;
-
 use anyhow::{bail, Result};
+use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use netlink_packet_route::{
     nlas::link::{Info, InfoKind, Nla},
     AddressMessage, LinkMessage, NetlinkHeader, NetlinkMessage, NetlinkPayload, RouteMessage,
-    RtnlMessage, AF_INET, IFF_UP, NLM_F_ACK, NLM_F_CREATE, NLM_F_DUMP, NLM_F_EXCL, NLM_F_REQUEST,
-    RTN_UNICAST, RTPROT_KERNEL, RTPROT_STATIC, RT_SCOPE_LINK, RT_SCOPE_UNIVERSE, RT_TABLE_MAIN,
+    RtnlMessage, AF_INET, AF_INET6, IFF_UP, NLM_F_ACK, NLM_F_CREATE, NLM_F_DUMP, NLM_F_EXCL,
+    NLM_F_REQUEST, RTN_UNICAST, RTPROT_STATIC, RT_SCOPE_UNIVERSE, RT_TABLE_MAIN,
 };
 use netlink_sys::{protocols::NETLINK_ROUTE, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 struct Socket {
     socket: netlink_sys::Socket,
@@ -18,6 +18,11 @@ struct Socket {
 struct LinkOptions {
     name: String,
     kind: InfoKind,
+}
+
+enum Route {
+    V4 { dest: Ipv4Net, gw: Ipv4Addr },
+    V6 { dest: Ipv6Net, gw: Ipv6Addr },
 }
 
 impl Socket {
@@ -79,15 +84,24 @@ impl Socket {
         Ok(())
     }
 
-    pub fn add_addr(&mut self, id: u32, addr: &ipnet::Ipv4Net) -> Result<()> {
-        let addr_vec = addr.addr().octets().to_vec();
+    pub fn add_addr(&mut self, id: u32, addr: &IpNet) -> Result<()> {
         let mut msg = AddressMessage::default();
         msg.header.index = id;
         msg.header.prefix_len = addr.prefix_len();
-        msg.header.family = AF_INET as u8;
-        msg.nlas.push(netlink_packet_route::address::Nla::Broadcast(
-            addr.broadcast().octets().to_vec(),
-        ));
+
+        let addr_vec = match addr {
+            IpNet::V4(v4) => {
+                msg.header.family = AF_INET as u8;
+                msg.nlas.push(netlink_packet_route::address::Nla::Broadcast(
+                    v4.broadcast().octets().to_vec(),
+                ));
+                v4.addr().octets().to_vec()
+            }
+            IpNet::V6(v6) => {
+                msg.header.family = AF_INET6 as u8;
+                v6.addr().octets().to_vec()
+            }
+        };
 
         msg.nlas
             .push(netlink_packet_route::address::Nla::Local(addr_vec));
@@ -99,19 +113,34 @@ impl Socket {
         Ok(())
     }
 
-    pub fn add_route(&mut self, dest: &ipnet::Ipv4Net, gw: &Ipv4Addr) -> Result<()> {
+    pub fn add_route(&mut self, route: &Route) -> Result<()> {
         let mut msg = RouteMessage::default();
 
         msg.header.table = RT_TABLE_MAIN;
         msg.header.protocol = RTPROT_STATIC;
         msg.header.scope = RT_SCOPE_UNIVERSE;
         msg.header.kind = RTN_UNICAST;
-        msg.header.address_family = AF_INET as u8;
-        msg.header.destination_prefix_length = dest.prefix_len();
 
-        let dest_vec = dest.addr().octets().to_vec();
-        let gw_vec = gw.octets().to_vec();
+        let (dest_vec, dest_prefix, gw_vec) = match route {
+            Route::V4 { dest, gw } => {
+                msg.header.address_family = AF_INET as u8;
+                (
+                    dest.addr().octets().to_vec(),
+                    dest.prefix_len(),
+                    gw.octets().to_vec(),
+                )
+            }
+            Route::V6 { dest, gw } => {
+                msg.header.address_family = AF_INET6 as u8;
+                (
+                    dest.addr().octets().to_vec(),
+                    dest.prefix_len(),
+                    gw.octets().to_vec(),
+                )
+            }
+        };
 
+        msg.header.destination_prefix_length = dest_prefix;
         msg.nlas
             .push(netlink_packet_route::route::Nla::Destination(dest_vec));
         msg.nlas
@@ -195,6 +224,8 @@ impl LinkOptions {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
 
     macro_rules! test_setup {
@@ -293,10 +324,13 @@ mod tests {
             .add_addr(link.header.index, &net.parse().unwrap())
             .is_ok());
 
-        let dest = ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0).unwrap();
         let gw = "10.244.0.1";
 
-        sock.add_route(&dest, &gw.parse().unwrap()).unwrap();
+        sock.add_route(&Route::V4 {
+            dest: Ipv4Net::from_str("0.0.0.0/0").unwrap(),
+            gw: gw.parse().unwrap(),
+        })
+        .unwrap();
 
         let out = String::from_utf8(run_command!("ip", "route", "show").stdout).unwrap();
         assert!(out.contains("default via 10.244.0.1 dev test"))
