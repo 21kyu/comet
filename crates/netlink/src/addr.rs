@@ -1,3 +1,5 @@
+use std::fmt;
+
 pub struct SockAddrNetlink(libc::sockaddr_nl);
 
 impl SockAddrNetlink {
