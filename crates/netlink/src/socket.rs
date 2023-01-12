@@ -5,10 +5,7 @@ use std::{
     os::fd::RawFd,
 };
 
-use crate::{
-    consts::{self},
-    SockAddrNetlink,
-};
+use crate::{consts, SockAddrNetlink};
 
 struct NetlinkSocket {
     fd: RawFd,
@@ -96,8 +93,18 @@ impl Drop for NetlinkSocket {
 }
 
 struct NetlinkMessage {
-    header: libc::nlmsghdr,
+    header: NetlinkMessageHeader,
     data: Vec<u8>,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct NetlinkMessageHeader {
+    nlmsg_len: u32,
+    nlmsg_type: u16,
+    nlmsg_flags: u16,
+    nlmsg_seq: u32,
+    nlmsg_pid: u32,
 }
 
 impl NetlinkMessage {
@@ -105,16 +112,14 @@ impl NetlinkMessage {
         let mut msgs = Vec::new();
 
         while buf.len() >= consts::NLMSG_HDRLEN {
-            let header = unsafe { *(buf.as_ptr() as *const libc::nlmsghdr) };
+            let header = unsafe { *(buf.as_ptr() as *const NetlinkMessageHeader) };
             let len = Self::nlm_align_of(header.nlmsg_len as usize);
-
             let data = buf[consts::NLMSG_HDRLEN..].to_vec();
 
-            let m = Self {
+            msgs.push(Self {
                 header,
                 data: data[..header.nlmsg_len as usize - consts::NLMSG_HDRLEN].to_vec(),
-            };
-            msgs.push(m);
+            });
             buf = &buf[len..];
         }
 
@@ -155,6 +160,57 @@ struct IfInfoMessage {
 impl IfInfoMessage {
     fn deserialize(buf: &[u8]) -> Result<Self> {
         Ok(unsafe { *(buf[..consts::IF_INFO_MSG_SIZE].as_ptr() as *const Self) })
+    }
+}
+
+struct NetlinkRouteAttr {
+    rtattr: RtAttr,
+    value: Vec<u8>,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct RtAttr {
+    rta_len: u16,
+    rta_type: u16,
+}
+
+impl NetlinkRouteAttr {
+    fn from(mut buf: &[u8]) -> Result<Vec<Self>> {
+        let mut attrs = Vec::new();
+
+        while buf.len() >= consts::RT_ATTR_SIZE {
+            let rtattr = unsafe { *(buf.as_ptr() as *const RtAttr) };
+            let len = Self::rta_align_of(rtattr.rta_len as usize);
+            let data = buf[consts::RT_ATTR_SIZE..].to_vec();
+
+            attrs.push(Self {
+                rtattr,
+                value: data[..rtattr.rta_len as usize - consts::RT_ATTR_SIZE].to_vec(),
+            });
+            buf = &buf[len..];
+        }
+
+        Ok(attrs)
+    }
+
+    fn parse(m: NetlinkMessage) -> Result<Vec<Self>> {
+        let mut b = Vec::new();
+
+        match m.header.nlmsg_type {
+            libc::RTM_NEWLINK | libc::RTM_DELLINK => {
+                b = m.data[consts::IF_INFO_MSG_SIZE..].to_vec();
+            }
+            _ => {}
+        }
+
+        let mut attrs = Vec::new();
+        // TODO
+        Ok(attrs)
+    }
+
+    fn rta_align_of(len: usize) -> usize {
+        (len + consts::RTA_ALIGNTO - 1) & !(consts::RTA_ALIGNTO - 1)
     }
 }
 
