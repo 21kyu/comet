@@ -4,6 +4,7 @@ use anyhow::Result;
 
 use crate::{
     consts,
+    request::NetlinkRequestData,
     socket::{IfInfoMessage, NetlinkRouteAttr},
 };
 

@@ -1,4 +1,4 @@
-use libc::c_int;
+use serde::Serialize;
 use std::{
     collections::HashMap,
     fmt::{self, Formatter},
@@ -6,7 +6,12 @@ use std::{
     os::fd::RawFd,
 };
 
-use crate::{consts, SockAddrNetlink};
+use crate::{consts, SockAddrNetlink, request::NetlinkRequestData};
+
+pub(crate) struct SocketHandle {
+    seq: u32,
+    socket: NetlinkSocket,
+}
 
 struct NetlinkSocket {
     fd: RawFd,
@@ -14,7 +19,7 @@ struct NetlinkSocket {
 }
 
 impl NetlinkSocket {
-    fn new(protocol: c_int, pid: u32, groups: u32) -> Result<Self> {
+    fn new(protocol: i32, pid: u32, groups: u32) -> Result<Self> {
         let fd = unsafe {
             libc::socket(
                 libc::AF_NETLINK,
@@ -99,13 +104,25 @@ struct NetlinkMessage {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize)]
 pub struct NetlinkMessageHeader {
-    nlmsg_len: u32,
+    pub(crate) nlmsg_len: u32,
     nlmsg_type: u16,
     nlmsg_flags: u16,
     nlmsg_seq: u32,
     nlmsg_pid: u32,
+}
+
+impl NetlinkMessageHeader {
+    pub(crate) fn new(proto: i32, flags: i32) -> Self {
+        Self {
+            nlmsg_len: std::mem::size_of::<Self>() as u32,
+            nlmsg_type: proto as u16,
+            nlmsg_flags: (libc::NLM_F_REQUEST | flags) as u16,
+            nlmsg_seq: 1, // TODO
+            nlmsg_pid: 0,
+        }
+    }
 }
 
 impl NetlinkMessage {
@@ -145,7 +162,7 @@ impl fmt::Debug for NetlinkMessage {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize)]
 pub(crate) struct IfInfoMessage {
     ifi_family: u8,
     _ifi_pad: u8,
@@ -155,13 +172,19 @@ pub(crate) struct IfInfoMessage {
     ifi_change: u32,
 }
 
+impl NetlinkRequestData for IfInfoMessage {
+    fn len(&self) -> usize {
+        consts::IF_INFO_MSG_SIZE
+    }
+
+    fn serialize(&self) -> anyhow::Result<Vec<u8>> {
+        bincode::serialize(self).map_err(|e| e.into())
+    }
+}
+
 impl IfInfoMessage {
     pub(crate) fn deserialize(buf: &[u8]) -> Result<Self> {
         Ok(unsafe { *(buf[..consts::IF_INFO_MSG_SIZE].as_ptr() as *const Self) })
-    }
-
-    pub(crate) fn len(&self) -> usize {
-        consts::IF_INFO_MSG_SIZE
     }
 }
 
