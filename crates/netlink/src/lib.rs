@@ -1,6 +1,8 @@
 mod addr;
 
-mod socket;
+pub mod socket;
 pub use addr::SockAddrNetlink;
+
+mod link;
 
 pub mod consts;

@@ -1,5 +1,6 @@
 use libc::c_int;
 use std::{
+    collections::HashMap,
     fmt::{self, Formatter},
     io::{Error, Result},
     os::fd::RawFd,
@@ -114,12 +115,9 @@ impl NetlinkMessage {
         while buf.len() >= consts::NLMSG_HDRLEN {
             let header = unsafe { *(buf.as_ptr() as *const NetlinkMessageHeader) };
             let len = Self::nlm_align_of(header.nlmsg_len as usize);
-            let data = buf[consts::NLMSG_HDRLEN..].to_vec();
+            let data = buf[consts::NLMSG_HDRLEN..header.nlmsg_len as usize].to_vec();
 
-            msgs.push(Self {
-                header,
-                data: data[..header.nlmsg_len as usize - consts::NLMSG_HDRLEN].to_vec(),
-            });
+            msgs.push(Self { header, data });
             buf = &buf[len..];
         }
 
@@ -148,46 +146,62 @@ impl fmt::Debug for NetlinkMessage {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-struct IfInfoMessage {
+pub(crate) struct IfInfoMessage {
     ifi_family: u8,
     _ifi_pad: u8,
     ifi_type: u16,
-    ifi_index: i32,
-    ifi_flags: u32,
+    pub(crate) ifi_index: i32,
+    pub(crate) ifi_flags: u32,
     ifi_change: u32,
 }
 
 impl IfInfoMessage {
-    fn deserialize(buf: &[u8]) -> Result<Self> {
+    pub(crate) fn deserialize(buf: &[u8]) -> Result<Self> {
         Ok(unsafe { *(buf[..consts::IF_INFO_MSG_SIZE].as_ptr() as *const Self) })
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        consts::IF_INFO_MSG_SIZE
     }
 }
 
-struct NetlinkRouteAttr {
-    rtattr: RtAttr,
-    value: Vec<u8>,
+pub(crate) struct NetlinkRouteAttr {
+    pub(crate) rt_attr: RtAttr,
+    pub(crate) value: Vec<u8>,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct RtAttr {
+pub(crate) struct RtAttr {
     rta_len: u16,
-    rta_type: u16,
+    pub(crate) rta_type: u16,
 }
 
 impl NetlinkRouteAttr {
-    fn from(mut buf: &[u8]) -> Result<Vec<Self>> {
+    pub fn map(mut buf: &[u8]) -> Result<HashMap<u16, Vec<u8>>> {
+        let mut attrs = HashMap::new();
+
+        while buf.len() >= consts::RT_ATTR_SIZE {
+            let rt_attr = unsafe { *(buf.as_ptr() as *const RtAttr) };
+            let len = Self::rta_align_of(rt_attr.rta_len as usize);
+            let value = buf[consts::RT_ATTR_SIZE..rt_attr.rta_len as usize].to_vec();
+
+            attrs.insert(rt_attr.rta_type, value);
+            buf = &buf[len..];
+        }
+
+        Ok(attrs)
+    }
+
+    pub(crate) fn from(mut buf: &[u8]) -> Result<Vec<Self>> {
         let mut attrs = Vec::new();
 
         while buf.len() >= consts::RT_ATTR_SIZE {
-            let rtattr = unsafe { *(buf.as_ptr() as *const RtAttr) };
-            let len = Self::rta_align_of(rtattr.rta_len as usize);
-            let data = buf[consts::RT_ATTR_SIZE..].to_vec();
+            let rt_attr = unsafe { *(buf.as_ptr() as *const RtAttr) };
+            let len = Self::rta_align_of(rt_attr.rta_len as usize);
+            let value = buf[consts::RT_ATTR_SIZE..rt_attr.rta_len as usize].to_vec();
 
-            attrs.push(Self {
-                rtattr,
-                value: data[..rtattr.rta_len as usize - consts::RT_ATTR_SIZE].to_vec(),
-            });
+            attrs.push(Self { rt_attr, value });
             buf = &buf[len..];
         }
 
@@ -309,7 +323,7 @@ mod tests {
             }
         }
 
-        println!("res: {:?}", res);
+        println!("res: {:04X?}", res[3]);
         println!("res.len(): {}", res.len());
 
         res.iter().for_each(|r| {
