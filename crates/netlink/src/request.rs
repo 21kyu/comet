@@ -1,30 +1,28 @@
 use anyhow::Result;
 
-use crate::socket::{NetlinkMessageHeader, SocketHandle};
+use crate::socket::NetlinkMessageHeader;
 
 pub(crate) trait NetlinkRequestData {
     fn len(&self) -> usize;
     fn serialize(&self) -> Result<Vec<u8>>;
 }
 
-struct NetlinkRequest {
+pub(crate) struct NetlinkRequest {
     header: NetlinkMessageHeader,
     data: Option<Vec<Box<dyn NetlinkRequestData>>>,
     raw_data: Option<Vec<u8>>,
-    socket: Option<SocketHandle>,
 }
 
 impl NetlinkRequest {
-    fn new(proto: i32, flags: i32) -> Self {
+    pub(crate) fn new(proto: u16, flags: i32) -> Self {
         Self {
             header: NetlinkMessageHeader::new(proto, flags),
             data: None,
             raw_data: None,
-            socket: None,
         }
     }
 
-    fn serialize(&mut self) -> Result<Vec<u8>> {
+    pub(crate) fn serialize(&mut self) -> Result<Vec<u8>> {
         let mut buf = Vec::new();
         buf.extend_from_slice(bincode::serialize(&self.header)?.as_slice());
         if let Some(data) = &self.data {
@@ -36,17 +34,19 @@ impl NetlinkRequest {
             buf.extend_from_slice(data);
         }
         self.header.nlmsg_len = buf.len() as u32;
+        buf[0..4].copy_from_slice(&bincode::serialize(&self.header.nlmsg_len)?.as_slice());
+
         Ok(buf)
     }
 
-    fn add_data(&mut self, data: Box<dyn NetlinkRequestData>) {
+    pub(crate) fn add_data(&mut self, data: Box<dyn NetlinkRequestData>) {
         if self.data.is_none() {
             self.data = Some(Vec::new());
         }
         self.data.as_mut().unwrap().push(data);
     }
 
-    fn add_raw_data(&mut self, data: Vec<u8>) {
+    pub(crate) fn add_raw_data(&mut self, data: Vec<u8>) {
         self.raw_data = Some(data);
     }
 }

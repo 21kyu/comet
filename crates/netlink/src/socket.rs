@@ -6,20 +6,15 @@ use std::{
     os::fd::RawFd,
 };
 
-use crate::{consts, SockAddrNetlink, request::NetlinkRequestData};
+use crate::{consts, request::NetlinkRequestData, SockAddrNetlink};
 
-pub(crate) struct SocketHandle {
-    seq: u32,
-    socket: NetlinkSocket,
-}
-
-struct NetlinkSocket {
+pub(crate) struct NetlinkSocket {
     fd: RawFd,
     lsa: SockAddrNetlink,
 }
 
 impl NetlinkSocket {
-    fn new(protocol: i32, pid: u32, groups: u32) -> Result<Self> {
+    pub(crate) fn new(protocol: i32, pid: u32, groups: u32) -> Result<Self> {
         let fd = unsafe {
             libc::socket(
                 libc::AF_NETLINK,
@@ -45,7 +40,7 @@ impl NetlinkSocket {
         Ok(())
     }
 
-    fn send(&self, buf: &[u8]) -> Result<()> {
+    pub(crate) fn send(&self, buf: &[u8]) -> Result<()> {
         let (addr, addr_len) = self.lsa.as_raw();
         let buf_ptr = buf.as_ptr() as *const libc::c_void;
         let buf_len = buf.len() as libc::size_t;
@@ -56,7 +51,7 @@ impl NetlinkSocket {
         Ok(())
     }
 
-    fn recv(&self) -> Result<(Vec<NetlinkMessage>, libc::sockaddr_nl)> {
+    pub(crate) fn recv(&self) -> Result<(Vec<NetlinkMessage>, libc::sockaddr_nl)> {
         let mut from: libc::sockaddr_nl = unsafe { std::mem::zeroed() };
         let mut buf: [u8; consts::RECV_BUF_SIZE] = [0; consts::RECV_BUF_SIZE];
         let ret = unsafe {
@@ -76,7 +71,7 @@ impl NetlinkSocket {
         Ok((netlink_msgs, from))
     }
 
-    fn pid(&self) -> Result<u32> {
+    pub(crate) fn pid(&self) -> Result<u32> {
         let mut rsa: libc::sockaddr_nl = unsafe { std::mem::zeroed() };
         let ret = unsafe {
             libc::getsockname(
@@ -98,26 +93,26 @@ impl Drop for NetlinkSocket {
     }
 }
 
-struct NetlinkMessage {
-    header: NetlinkMessageHeader,
-    data: Vec<u8>,
+pub(crate) struct NetlinkMessage {
+    pub(crate) header: NetlinkMessageHeader,
+    pub(crate) data: Vec<u8>,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Serialize)]
-pub struct NetlinkMessageHeader {
+pub(crate) struct NetlinkMessageHeader {
     pub(crate) nlmsg_len: u32,
-    nlmsg_type: u16,
+    pub(crate) nlmsg_type: u16,
     nlmsg_flags: u16,
     nlmsg_seq: u32,
-    nlmsg_pid: u32,
+    pub(crate) nlmsg_pid: u32,
 }
 
 impl NetlinkMessageHeader {
-    pub(crate) fn new(proto: i32, flags: i32) -> Self {
+    pub(crate) fn new(proto: u16, flags: i32) -> Self {
         Self {
             nlmsg_len: std::mem::size_of::<Self>() as u32,
-            nlmsg_type: proto as u16,
+            nlmsg_type: proto,
             nlmsg_flags: (libc::NLM_F_REQUEST | flags) as u16,
             nlmsg_seq: 1, // TODO
             nlmsg_pid: 0,
@@ -183,24 +178,57 @@ impl NetlinkRequestData for IfInfoMessage {
 }
 
 impl IfInfoMessage {
+    pub(crate) fn new(family: i32) -> Self {
+        Self {
+            ifi_family: family as u8,
+            _ifi_pad: 0,
+            ifi_type: 0,
+            ifi_index: 0,
+            ifi_flags: 0,
+            ifi_change: 0,
+        }
+    }
+
     pub(crate) fn deserialize(buf: &[u8]) -> Result<Self> {
         Ok(unsafe { *(buf[..consts::IF_INFO_MSG_SIZE].as_ptr() as *const Self) })
     }
 }
 
+#[derive(Serialize)]
 pub(crate) struct NetlinkRouteAttr {
     pub(crate) rt_attr: RtAttr,
+    #[serde(with = "serde_bytes")]
     pub(crate) value: Vec<u8>,
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize)]
 pub(crate) struct RtAttr {
     rta_len: u16,
     pub(crate) rta_type: u16,
 }
 
+impl NetlinkRequestData for NetlinkRouteAttr {
+    fn len(&self) -> usize {
+        self.rt_attr.rta_len as usize
+    }
+
+    fn serialize(&self) -> anyhow::Result<Vec<u8>> {
+        bincode::serialize(self).map_err(|e| e.into())
+    }
+}
+
 impl NetlinkRouteAttr {
+    pub(crate) fn new(rta_type: u16, value: Vec<u8>) -> Self {
+        Self {
+            rt_attr: RtAttr {
+                rta_len: (consts::RT_ATTR_SIZE + value.len()) as u16,
+                rta_type,
+            },
+            value,
+        }
+    }
+
     pub fn map(mut buf: &[u8]) -> Result<HashMap<u16, Vec<u8>>> {
         let mut attrs = HashMap::new();
 

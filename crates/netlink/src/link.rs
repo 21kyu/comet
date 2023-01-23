@@ -30,8 +30,8 @@ pub(crate) trait Link {
 #[derive(Debug, Default)]
 pub(crate) struct LinkAttrs {
     link_type: String,
-    index: i32,
-    name: String,
+    pub(crate) index: i32,
+    pub(crate) name: String,
     hw_addr: Vec<u8>,
     mtu: u32,
     flags: u32,
@@ -130,7 +130,7 @@ impl LinkXdp {
     }
 }
 
-fn link_deserialize(buf: &[u8]) -> Result<Box<dyn Link>> {
+pub(crate) fn link_deserialize(buf: &[u8]) -> Result<Box<dyn Link>> {
     let if_info_msg = IfInfoMessage::deserialize(buf)?;
     let rt_attrs = NetlinkRouteAttr::from(&buf[if_info_msg.len()..])?;
 

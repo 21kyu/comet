@@ -10,3 +10,4 @@ anyhow = "1.0.68"
 bincode = "1.3.3"
 libc = "0.2.139"
 serde = { version = "1.0.152", features = ["derive"] }
+serde_bytes = "0.11.8"
