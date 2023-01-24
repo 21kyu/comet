@@ -104,7 +104,7 @@ pub(crate) struct NetlinkMessageHeader {
     pub(crate) nlmsg_len: u32,
     pub(crate) nlmsg_type: u16,
     nlmsg_flags: u16,
-    nlmsg_seq: u32,
+    pub(crate) nlmsg_seq: u32,
     pub(crate) nlmsg_pid: u32,
 }
 
@@ -114,7 +114,7 @@ impl NetlinkMessageHeader {
             nlmsg_len: std::mem::size_of::<Self>() as u32,
             nlmsg_type: proto,
             nlmsg_flags: (libc::NLM_F_REQUEST | flags) as u16,
-            nlmsg_seq: 1, // TODO
+            nlmsg_seq: 0,
             nlmsg_pid: 0,
         }
     }

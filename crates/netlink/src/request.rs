@@ -8,7 +8,7 @@ pub(crate) trait NetlinkRequestData {
 }
 
 pub(crate) struct NetlinkRequest {
-    header: NetlinkMessageHeader,
+    pub(crate) header: NetlinkMessageHeader,
     data: Option<Vec<Box<dyn NetlinkRequestData>>>,
     raw_data: Option<Vec<u8>>,
 }
