@@ -53,7 +53,7 @@ impl NetlinkRequest {
 
 #[cfg(test)]
 mod tests {
-    use crate::socket::IfInfoMessage;
+    use crate::socket::{IfInfoMessage, NetlinkRouteAttr};
 
     use super::*;
 
@@ -88,8 +88,11 @@ mod tests {
         let msg = IfInfoMessage::deserialize(&NETLINK_MSG).unwrap();
         req.add_data(Box::new(msg));
 
+        let name = NetlinkRouteAttr::new(libc::IFLA_IFNAME, "lo".as_bytes().to_vec());
+        req.add_data(Box::new(name));
+
         let buf = req.serialize().unwrap();
-        assert_eq!(buf.len(), 16 + msg.len());
-        assert_eq!(req.header.nlmsg_len, 16 + msg.len() as u32);
+        assert_eq!(buf.len(), 38);
+        assert_eq!(req.header.nlmsg_len, 38);
     }
 }

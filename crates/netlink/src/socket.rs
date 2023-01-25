@@ -99,7 +99,7 @@ pub(crate) struct NetlinkMessage {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Serialize)]
+#[derive(Clone, Copy, Serialize, Debug)]
 pub(crate) struct NetlinkMessageHeader {
     pub(crate) nlmsg_len: u32,
     pub(crate) nlmsg_type: u16,
@@ -157,14 +157,14 @@ impl fmt::Debug for NetlinkMessage {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Default, Debug, Serialize)]
 pub(crate) struct IfInfoMessage {
     ifi_family: u8,
     _ifi_pad: u8,
     ifi_type: u16,
     pub(crate) ifi_index: i32,
     pub(crate) ifi_flags: u32,
-    ifi_change: u32,
+    pub(crate) ifi_change: u32,
 }
 
 impl NetlinkRequestData for IfInfoMessage {
@@ -181,11 +181,7 @@ impl IfInfoMessage {
     pub(crate) fn new(family: i32) -> Self {
         Self {
             ifi_family: family as u8,
-            _ifi_pad: 0,
-            ifi_type: 0,
-            ifi_index: 0,
-            ifi_flags: 0,
-            ifi_change: 0,
+            ..Default::default()
         }
     }
 
@@ -194,17 +190,16 @@ impl IfInfoMessage {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Debug)]
 pub(crate) struct NetlinkRouteAttr {
     pub(crate) rt_attr: RtAttr,
-    #[serde(with = "serde_bytes")]
     pub(crate) value: Vec<u8>,
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Serialize)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct RtAttr {
-    rta_len: u16,
+    pub(crate) rta_len: u16,
     pub(crate) rta_type: u16,
 }
 
@@ -214,7 +209,11 @@ impl NetlinkRequestData for NetlinkRouteAttr {
     }
 
     fn serialize(&self) -> anyhow::Result<Vec<u8>> {
-        bincode::serialize(self).map_err(|e| e.into())
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&self.rt_attr.rta_len.to_ne_bytes());
+        buf.extend_from_slice(&self.rt_attr.rta_type.to_ne_bytes());
+        buf.extend_from_slice(&self.value);
+        Ok(buf)
     }
 }
 

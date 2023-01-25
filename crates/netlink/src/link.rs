@@ -34,7 +34,7 @@ pub(crate) struct LinkAttrs {
     pub(crate) name: String,
     hw_addr: Vec<u8>,
     mtu: u32,
-    flags: u32,
+    pub(crate) flags: u32,
     raw_flags: u32,
     parent_index: i32,
     master_index: i32,
@@ -56,7 +56,7 @@ pub(crate) struct LinkAttrs {
 }
 
 impl LinkAttrs {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
