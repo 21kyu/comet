@@ -32,3 +32,5 @@ pub const IFLA_XDP_FLAGS: u16 = 0x3;
 pub const IFLA_XDP_PROG_ID: u16 = 0x4;
 
 pub const IFLA_GRO_MAX_SIZE: u16 = 0x3a;
+
+pub const VETH_INFO_PEER: u16 = 1;

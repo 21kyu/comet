@@ -33,8 +33,6 @@ impl NetlinkRequest {
         if let Some(data) = &self.raw_data {
             buf.extend_from_slice(data);
         }
-        self.header.nlmsg_len = buf.len() as u32;
-        buf[0..4].copy_from_slice(&bincode::serialize(&self.header.nlmsg_len)?.as_slice());
 
         Ok(buf)
     }
@@ -43,11 +41,16 @@ impl NetlinkRequest {
         if self.data.is_none() {
             self.data = Some(Vec::new());
         }
+        self.header.nlmsg_len += data.len() as u32;
         self.data.as_mut().unwrap().push(data);
     }
 
-    pub(crate) fn add_raw_data(&mut self, data: Vec<u8>) {
-        self.raw_data = Some(data);
+    pub(crate) fn add_raw_data(&mut self, mut data: Vec<u8>) {
+        if self.raw_data.is_none() {
+            self.raw_data = Some(Vec::new());
+        }
+        self.header.nlmsg_len += data.len() as u32;
+        self.raw_data.as_mut().unwrap().append(&mut data);
     }
 }
 

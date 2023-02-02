@@ -6,7 +6,12 @@ use std::{
     os::fd::RawFd,
 };
 
-use crate::{consts, request::NetlinkRequestData, SockAddrNetlink};
+use crate::{
+    consts,
+    link::{LinkAttrs, Namespace},
+    request::NetlinkRequestData,
+    SockAddrNetlink,
+};
 
 pub(crate) struct NetlinkSocket {
     fd: RawFd,
@@ -190,10 +195,10 @@ impl IfInfoMessage {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct NetlinkRouteAttr {
     pub(crate) rt_attr: RtAttr,
     pub(crate) value: Vec<u8>,
+    children: Option<Vec<Box<dyn NetlinkRequestData>>>,
 }
 
 #[repr(C)]
@@ -213,6 +218,11 @@ impl NetlinkRequestData for NetlinkRouteAttr {
         buf.extend_from_slice(&self.rt_attr.rta_len.to_ne_bytes());
         buf.extend_from_slice(&self.rt_attr.rta_type.to_ne_bytes());
         buf.extend_from_slice(&self.value);
+        if let Some(children) = &self.children {
+            for child in children {
+                buf.extend_from_slice(&child.serialize()?);
+            }
+        }
         Ok(buf)
     }
 }
@@ -225,6 +235,7 @@ impl NetlinkRouteAttr {
                 rta_type,
             },
             value,
+            children: None,
         }
     }
 
@@ -251,30 +262,104 @@ impl NetlinkRouteAttr {
             let len = Self::rta_align_of(rt_attr.rta_len as usize);
             let value = buf[consts::RT_ATTR_SIZE..rt_attr.rta_len as usize].to_vec();
 
-            attrs.push(Self { rt_attr, value });
+            attrs.push(Self {
+                rt_attr,
+                value,
+                children: None,
+            });
             buf = &buf[len..];
         }
 
         Ok(attrs)
     }
 
-    fn parse(m: NetlinkMessage) -> Result<Vec<Self>> {
-        let mut b = Vec::new();
-
-        match m.header.nlmsg_type {
-            libc::RTM_NEWLINK | libc::RTM_DELLINK => {
-                b = m.data[consts::IF_INFO_MSG_SIZE..].to_vec();
-            }
-            _ => {}
-        }
-
-        let mut attrs = Vec::new();
-        // TODO
-        Ok(attrs)
-    }
-
     fn rta_align_of(len: usize) -> usize {
         (len + consts::RTA_ALIGNTO - 1) & !(consts::RTA_ALIGNTO - 1)
+    }
+
+    pub(crate) fn add_child(&mut self, rta_type: u16, value: Vec<u8>) {
+        if let None = self.children {
+            self.children = Some(Vec::new());
+        }
+        let attr = Box::new(NetlinkRouteAttr::new(rta_type, value));
+        self.rt_attr.rta_len += attr.len() as u16;
+        self.children.as_mut().unwrap().push(attr);
+    }
+
+    fn add_child_from_attr<T>(&mut self, attr: Box<T>)
+    where
+        T: NetlinkRequestData + 'static,
+    {
+        if let None = self.children {
+            self.children = Some(Vec::new());
+        }
+        self.rt_attr.rta_len += attr.len() as u16;
+        self.children.as_mut().unwrap().push(attr);
+    }
+
+    pub(crate) fn add_veth_attrs(
+        &mut self,
+        base: &LinkAttrs,
+        peer_name: &str,
+        peer_hw_addr: &[u8],
+        peer_ns: &Option<Namespace>,
+    ) {
+        let mut data = Box::new(NetlinkRouteAttr::new(libc::IFLA_INFO_DATA, vec![]));
+        let mut peer_info = Box::new(NetlinkRouteAttr::new(consts::VETH_INFO_PEER, vec![]));
+        let peer_if_info_msg = Box::new(IfInfoMessage::new(libc::AF_UNSPEC));
+
+        peer_info.add_child_from_attr(peer_if_info_msg);
+        peer_info.add_child(libc::IFLA_IFNAME, peer_name.as_bytes().to_vec());
+
+        if base.mtu > 0 {
+            peer_info.add_child(libc::IFLA_MTU, base.mtu.to_ne_bytes().to_vec());
+        }
+
+        if base.tx_queue_len > 0 {
+            peer_info.add_child(libc::IFLA_TXQLEN, base.tx_queue_len.to_ne_bytes().to_vec());
+        }
+
+        if base.num_tx_queues > 0 {
+            peer_info.add_child(
+                libc::IFLA_NUM_TX_QUEUES,
+                base.num_tx_queues.to_ne_bytes().to_vec(),
+            );
+        }
+
+        if base.num_rx_queues > 0 {
+            peer_info.add_child(
+                libc::IFLA_NUM_RX_QUEUES,
+                base.num_rx_queues.to_ne_bytes().to_vec(),
+            );
+        }
+
+        if peer_hw_addr.len() > 0 {
+            peer_info.add_child(libc::IFLA_ADDRESS, peer_hw_addr.to_vec());
+        }
+
+        match peer_ns {
+            Some(ns) => match ns {
+                Namespace::Pid(pid) => {
+                    peer_info.add_child(libc::IFLA_NET_NS_PID, pid.to_ne_bytes().to_vec());
+                }
+                Namespace::Fd(fd) => {
+                    peer_info.add_child(libc::IFLA_NET_NS_FD, fd.to_ne_bytes().to_vec());
+                }
+            },
+            None => {}
+        }
+
+        data.add_child_from_attr(peer_info);
+        self.add_child_from_attr(data);
+    }
+
+    pub(crate) fn add_bridge_attrs(
+        &mut self,
+        hello_time: u32,
+        ageing_time: u32,
+        multicast_snooping: bool,
+        vlan_filtering: bool,
+    ) {
     }
 }
 

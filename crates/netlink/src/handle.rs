@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 
 use crate::{
     consts,
-    link::{self, Link, LinkAttrs},
+    link::{self, Kind, Link, LinkAttrs},
     request::NetlinkRequest,
     socket::{IfInfoMessage, NetlinkRouteAttr, NetlinkSocket},
 };
@@ -37,12 +37,43 @@ impl SocketHandle {
 
         req.add_data(msg);
 
-        let name = Box::new(NetlinkRouteAttr::new(
-            libc::IFLA_IFNAME,
-            base.name.as_bytes().to_vec(),
-        ));
+        let mut name = base.name.as_bytes().to_vec();
+        name.push(0);
+
+        let name = Box::new(NetlinkRouteAttr::new(libc::IFLA_IFNAME, name));
 
         req.add_data(name);
+
+        // TODO: add more attributes
+
+        let mut link_info = Box::new(NetlinkRouteAttr::new(libc::IFLA_LINKINFO, vec![]));
+
+        link_info.add_child(libc::IFLA_INFO_KIND, link.link_type().as_bytes().to_vec());
+
+        match link.kind() {
+            Kind::Veth {
+                attrs,
+                peer_name,
+                peer_hw_addr,
+                peer_ns,
+            } => {
+                link_info.add_veth_attrs(base, peer_name, peer_hw_addr, peer_ns);
+            }
+            Kind::Bridge {
+                attrs,
+                hello_time,
+                ageing_time,
+                multicast_snooping,
+                vlan_filtering,
+            } => {
+                // TODO add bridge attributes
+            }
+            _ => {}
+        }
+
+        req.add_data(link_info);
+
+        let msgs = self.execute(&mut req, 0)?;
 
         Ok(())
     }
@@ -138,10 +169,47 @@ impl SocketHandle {
 
 #[cfg(test)]
 mod tests {
-    use crate::link;
+    use crate::link::{self, Link};
+
+    macro_rules! test_setup {
+        () => {
+            if !nix::unistd::geteuid().is_root() {
+                eprintln!("Test skipped, must be run as root");
+                return;
+            }
+            nix::sched::unshare(nix::sched::CloneFlags::CLONE_NEWNET).unwrap();
+        };
+    }
+
+    #[test]
+    fn test_link_new() {
+        test_setup!();
+        let mut handle = super::SocketHandle::new(libc::NETLINK_ROUTE).unwrap();
+        let mut attr = link::LinkAttrs::new();
+        attr.name = "foo".to_string();
+
+        let mut link = link::Kind::Dummy(attr);
+
+        handle
+            .link_new(
+                &mut link,
+                libc::NLM_F_CREATE | libc::NLM_F_EXCL | libc::NLM_F_ACK,
+            )
+            .unwrap();
+
+        let mut attr = link::LinkAttrs::new();
+        attr.name = "foo".to_string();
+
+        let link = handle.link_get(&attr).unwrap();
+
+        assert_eq!(link.attrs().name, "foo");
+
+        println!("{:?}", link.attrs());
+    }
 
     #[test]
     fn test_link_get() {
+        test_setup!();
         let mut handle = super::SocketHandle::new(libc::NETLINK_ROUTE).unwrap();
         let mut attr = link::LinkAttrs::new();
         attr.name = "lo".to_string();

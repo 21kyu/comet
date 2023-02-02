@@ -8,6 +8,11 @@ use crate::{
     socket::{IfInfoMessage, NetlinkRouteAttr},
 };
 
+pub(crate) enum Namespace {
+    Pid(i32),
+    Fd(i32),
+}
+
 pub(crate) enum Kind {
     Device(LinkAttrs),
     Dummy(LinkAttrs),
@@ -18,7 +23,12 @@ pub(crate) enum Kind {
         multicast_snooping: bool,
         vlan_filtering: bool,
     },
-    Veth(LinkAttrs),
+    Veth {
+        attrs: LinkAttrs,
+        peer_name: String,
+        peer_hw_addr: Vec<u8>,
+        peer_ns: Option<Namespace>,
+    },
 }
 
 pub(crate) trait Link {
@@ -33,12 +43,12 @@ pub(crate) struct LinkAttrs {
     pub(crate) index: i32,
     pub(crate) name: String,
     hw_addr: Vec<u8>,
-    mtu: u32,
+    pub(crate) mtu: u32,
     pub(crate) flags: u32,
     raw_flags: u32,
     parent_index: i32,
     master_index: i32,
-    tx_queue_len: i32,
+    pub(crate) tx_queue_len: i32,
     alias: String,
     xdp: LinkXdp,
     prot_info: String,
@@ -49,8 +59,8 @@ pub(crate) struct LinkAttrs {
     gso_max_segs: u32,
     gro_max_size: u32,
     vfs: String,
-    num_tx_queues: i32,
-    num_rx_queues: i32,
+    pub(crate) num_tx_queues: i32,
+    pub(crate) num_rx_queues: i32,
     group: u32,
     statistics: String,
 }
@@ -70,7 +80,12 @@ impl LinkAttrs {
 
 impl Link for Kind {
     fn link_type(&self) -> String {
-        self.attrs().link_type.clone()
+        match self {
+            Kind::Device(_) => "device".to_string(),
+            Kind::Dummy(_) => "dummy".to_string(),
+            Kind::Bridge { .. } => "bridge".to_string(),
+            Kind::Veth { .. } => "veth".to_string(),
+        }
     }
 
     fn attrs(&self) -> &LinkAttrs {
@@ -78,7 +93,7 @@ impl Link for Kind {
             Kind::Device(attrs) => attrs,
             Kind::Dummy(attrs) => attrs,
             Kind::Bridge { attrs, .. } => attrs,
-            Kind::Veth(attrs) => attrs,
+            Kind::Veth { attrs, .. } => attrs,
         }
     }
 
@@ -235,7 +250,7 @@ pub(crate) fn link_deserialize(buf: &[u8]) -> Result<Box<dyn Link>> {
     println!("index: {:#?}", base);
 
     Ok(match &base.link_type[..] {
-        "device" => Box::new(Kind::Device(base)),
+        "device" | _ => Box::new(Kind::Device(base)),
         "dummy" => Box::new(Kind::Dummy(base)),
         "bridge" => Box::new(Kind::Bridge {
             attrs: base,
@@ -256,8 +271,13 @@ pub(crate) fn link_deserialize(buf: &[u8]) -> Result<Box<dyn Link>> {
                 .map(|v| v[0] == 1)
                 .unwrap_or(false),
         }),
-        "veth" => Box::new(Kind::Veth(base)),
-        _ => Box::new(Kind::Device(base)),
+        "veth" => Box::new(Kind::Veth {
+            // TODO: need to parse peer info..?
+            attrs: base,
+            peer_name: "".to_string(),
+            peer_hw_addr: vec![],
+            peer_ns: None,
+        }),
     })
 }
 
