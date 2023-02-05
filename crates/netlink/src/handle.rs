@@ -20,7 +20,10 @@ impl SocketHandle {
         })
     }
 
-    fn link_new(&mut self, link: &mut dyn Link, flags: i32) -> Result<()> {
+    fn link_new<T>(&mut self, link: &T, flags: i32) -> Result<()>
+    where
+        T: Link + ?Sized,
+    {
         let base = link.attrs();
         let mut req = NetlinkRequest::new(libc::RTM_NEWLINK, flags);
         let mut msg = Box::new(IfInfoMessage::new(libc::AF_UNSPEC));
@@ -72,6 +75,24 @@ impl SocketHandle {
         }
 
         req.add_data(link_info);
+
+        let msgs = self.execute(&mut req, 0)?;
+
+        Ok(())
+    }
+
+    fn link_del<T>(&mut self, link: &T) -> Result<()>
+    where
+        T: Link + ?Sized,
+    {
+        let base = link.attrs();
+
+        let mut req = NetlinkRequest::new(libc::RTM_DELLINK, libc::NLM_F_ACK);
+
+        let mut msg = Box::new(IfInfoMessage::new(libc::AF_UNSPEC));
+        msg.ifi_index = base.index;
+
+        req.add_data(msg);
 
         let msgs = self.execute(&mut req, 0)?;
 
@@ -169,7 +190,7 @@ impl SocketHandle {
 
 #[cfg(test)]
 mod tests {
-    use crate::link::{self, Link};
+    use crate::link::{self, Kind, LinkAttrs};
 
     macro_rules! test_setup {
         () => {
@@ -182,29 +203,39 @@ mod tests {
     }
 
     #[test]
-    fn test_link_new() {
+    fn test_link_add_modify_del() {
         test_setup!();
         let mut handle = super::SocketHandle::new(libc::NETLINK_ROUTE).unwrap();
-        let mut attr = link::LinkAttrs::new();
+        let mut attr = LinkAttrs::new();
         attr.name = "foo".to_string();
 
-        let mut link = link::Kind::Dummy(attr);
+        let link = Kind::Dummy(attr.clone());
 
         handle
             .link_new(
-                &mut link,
+                &link,
                 libc::NLM_F_CREATE | libc::NLM_F_EXCL | libc::NLM_F_ACK,
             )
             .unwrap();
 
-        let mut attr = link::LinkAttrs::new();
-        attr.name = "foo".to_string();
-
         let link = handle.link_get(&attr).unwrap();
-
         assert_eq!(link.attrs().name, "foo");
 
-        println!("{:?}", link.attrs());
+        attr = link.attrs().clone();
+        attr.name = "bar".to_string();
+
+        let link = Kind::Dummy(attr.clone());
+
+        handle.link_new(&link, libc::NLM_F_ACK).unwrap();
+
+        let link = handle.link_get(&attr).unwrap();
+        assert_eq!(link.attrs().name, "bar");
+
+        handle.link_del(&*link).unwrap();
+
+        let res = handle.link_get(&attr).err();
+        println!("{:?}", res);
+        assert!(res.is_some());
     }
 
     #[test]

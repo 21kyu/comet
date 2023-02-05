@@ -37,7 +37,7 @@ pub(crate) trait Link {
     fn kind(&self) -> &Kind;
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct LinkAttrs {
     link_type: String,
     pub(crate) index: i32,
@@ -102,7 +102,7 @@ impl Link for Kind {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct LinkXdp {
     fd: i32,
     attached: bool,
