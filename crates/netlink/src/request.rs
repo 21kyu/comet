@@ -34,6 +34,9 @@ impl NetlinkRequest {
             buf.extend_from_slice(data);
         }
 
+        let len = buf.len() as u16;
+        buf[..2].copy_from_slice(&len.to_le_bytes());
+
         Ok(buf)
     }
 

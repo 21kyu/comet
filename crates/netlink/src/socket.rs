@@ -218,11 +218,21 @@ impl NetlinkRequestData for NetlinkRouteAttr {
         buf.extend_from_slice(&self.rt_attr.rta_len.to_ne_bytes());
         buf.extend_from_slice(&self.rt_attr.rta_type.to_ne_bytes());
         buf.extend_from_slice(&self.value);
+
+        let align_to = Self::rta_align_of(buf.len());
+        if buf.len() < align_to {
+            buf.resize(align_to, 0);
+        }
+
         if let Some(children) = &self.children {
             for child in children {
                 buf.extend_from_slice(&child.serialize()?);
             }
         }
+
+        let len = buf.len();
+        buf[..2].copy_from_slice(&(len as u16).to_ne_bytes());
+
         Ok(buf)
     }
 }
@@ -355,11 +365,42 @@ impl NetlinkRouteAttr {
 
     pub(crate) fn add_bridge_attrs(
         &mut self,
-        hello_time: u32,
-        ageing_time: u32,
-        multicast_snooping: bool,
-        vlan_filtering: bool,
+        hello_time: &Option<u32>,
+        ageing_time: &Option<u32>,
+        multicast_snooping: &Option<bool>,
+        vlan_filtering: &Option<bool>,
     ) {
+        let mut data = Box::new(NetlinkRouteAttr::new(libc::IFLA_INFO_DATA, vec![]));
+
+        if let Some(hello_time) = hello_time {
+            data.add_child(
+                consts::IFLA_BR_HELLO_TIME,
+                hello_time.to_ne_bytes().to_vec(),
+            );
+        }
+
+        if let Some(ageing_time) = ageing_time {
+            data.add_child(
+                consts::IFLA_BR_AGEING_TIME,
+                ageing_time.to_ne_bytes().to_vec(),
+            );
+        }
+
+        if let Some(multicast_snooping) = multicast_snooping {
+            data.add_child(
+                consts::IFLA_BR_MCAST_SNOOPING,
+                (*multicast_snooping as u8).to_ne_bytes().to_vec(),
+            );
+        }
+
+        if let Some(vlan_filtering) = vlan_filtering {
+            data.add_child(
+                consts::IFLA_BR_VLAN_FILTERING,
+                (*vlan_filtering as u8).to_ne_bytes().to_vec(),
+            );
+        }
+
+        self.add_child_from_attr(data);
     }
 }
 

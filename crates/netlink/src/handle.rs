@@ -69,7 +69,12 @@ impl SocketHandle {
                 multicast_snooping,
                 vlan_filtering,
             } => {
-                // TODO add bridge attributes
+                link_info.add_bridge_attrs(
+                    hello_time,
+                    ageing_time,
+                    multicast_snooping,
+                    vlan_filtering,
+                );
             }
             _ => {}
         }
@@ -200,6 +205,54 @@ mod tests {
             }
             nix::sched::unshare(nix::sched::CloneFlags::CLONE_NEWNET).unwrap();
         };
+    }
+
+    #[test]
+    fn test_link_bridge() {
+        test_setup!();
+        let mut handle = super::SocketHandle::new(libc::NETLINK_ROUTE).unwrap();
+        let mut attr = LinkAttrs::new();
+        attr.name = "foo".to_string();
+
+        let link = Kind::Bridge {
+            attrs: attr.clone(),
+            hello_time: None,
+            ageing_time: Some(30102),
+            multicast_snooping: None,
+            vlan_filtering: Some(true),
+        };
+
+        handle
+            .link_new(
+                &link,
+                libc::NLM_F_CREATE | libc::NLM_F_EXCL | libc::NLM_F_ACK,
+            )
+            .unwrap();
+
+        let link = handle.link_get(&attr).unwrap();
+        assert_eq!(link.attrs().link_type, "bridge");
+        assert_eq!(link.attrs().name, "foo");
+
+        match link.kind() {
+            Kind::Bridge {
+                attrs: _,
+                hello_time,
+                ageing_time,
+                multicast_snooping,
+                vlan_filtering,
+            } => {
+                assert_eq!(hello_time.unwrap(), 200);
+                assert_eq!(ageing_time.unwrap(), 30102);
+                assert_eq!(multicast_snooping.unwrap(), true);
+                assert_eq!(vlan_filtering.unwrap(), true);
+            }
+            _ => panic!("wrong link type"),
+        }
+
+        handle.link_del(&*link).unwrap();
+
+        let res = handle.link_get(&attr).err();
+        assert!(res.is_some());
     }
 
     #[test]

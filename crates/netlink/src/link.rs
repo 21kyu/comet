@@ -18,10 +18,10 @@ pub(crate) enum Kind {
     Dummy(LinkAttrs),
     Bridge {
         attrs: LinkAttrs,
-        hello_time: u32,
-        ageing_time: u32,
-        multicast_snooping: bool,
-        vlan_filtering: bool,
+        hello_time: Option<u32>,
+        ageing_time: Option<u32>,
+        multicast_snooping: Option<bool>,
+        vlan_filtering: Option<bool>,
     },
     Veth {
         attrs: LinkAttrs,
@@ -39,7 +39,7 @@ pub(crate) trait Link {
 
 #[derive(Debug, Default, Clone)]
 pub(crate) struct LinkAttrs {
-    link_type: String,
+    pub(crate) link_type: String,
     pub(crate) index: i32,
     pub(crate) name: String,
     hw_addr: Vec<u8>,
@@ -250,26 +250,17 @@ pub(crate) fn link_deserialize(buf: &[u8]) -> Result<Box<dyn Link>> {
     println!("index: {:#?}", base);
 
     Ok(match &base.link_type[..] {
-        "device" | _ => Box::new(Kind::Device(base)),
         "dummy" => Box::new(Kind::Dummy(base)),
         "bridge" => Box::new(Kind::Bridge {
             attrs: base,
             hello_time: data
                 .get(&consts::IFLA_BR_HELLO_TIME)
-                .map(|v| u32::from_ne_bytes(v[..4].try_into().unwrap()))
-                .unwrap_or(0),
+                .map(|v| u32::from_ne_bytes(v[..4].try_into().unwrap())),
             ageing_time: data
                 .get(&consts::IFLA_BR_AGEING_TIME)
-                .map(|v| u32::from_ne_bytes(v[..4].try_into().unwrap()))
-                .unwrap_or(0),
-            multicast_snooping: data
-                .get(&consts::IFLA_BR_MCAST_SNOOPING)
-                .map(|v| v[0] == 1)
-                .unwrap_or(false),
-            vlan_filtering: data
-                .get(&consts::IFLA_BR_VLAN_FILTERING)
-                .map(|v| v[0] == 1)
-                .unwrap_or(false),
+                .map(|v| u32::from_ne_bytes(v[..4].try_into().unwrap())),
+            multicast_snooping: data.get(&consts::IFLA_BR_MCAST_SNOOPING).map(|v| v[0] == 1),
+            vlan_filtering: data.get(&consts::IFLA_BR_VLAN_FILTERING).map(|v| v[0] == 1),
         }),
         "veth" => Box::new(Kind::Veth {
             // TODO: need to parse peer info..?
@@ -278,6 +269,7 @@ pub(crate) fn link_deserialize(buf: &[u8]) -> Result<Box<dyn Link>> {
             peer_hw_addr: vec![],
             peer_ns: None,
         }),
+        "device" | _ => Box::new(Kind::Device(base)),
     })
 }
 
@@ -457,10 +449,10 @@ mod tests {
                 multicast_snooping,
                 vlan_filtering,
             } => {
-                assert_eq!(hello_time, &200);
-                assert_eq!(ageing_time, &30000);
-                assert_eq!(multicast_snooping, &true);
-                assert_eq!(vlan_filtering, &false);
+                assert_eq!(hello_time.unwrap(), 200);
+                assert_eq!(ageing_time.unwrap(), 30000);
+                assert_eq!(multicast_snooping.unwrap(), true);
+                assert_eq!(vlan_filtering.unwrap(), false);
             }
             _ => panic!("Expected bridge link"),
         }
