@@ -1,7 +1,7 @@
 pub mod addr;
 pub mod consts;
-mod handle;
-mod link;
-mod request;
+pub mod handle;
+pub mod link;
+pub mod request;
 pub mod socket;
 pub mod utils;

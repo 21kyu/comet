@@ -135,9 +135,7 @@ impl LinkXdp {
                 consts::IFLA_XDP_PROG_ID => {
                     xdp.prog_id = u32::from_ne_bytes(attr.value[..4].try_into().unwrap());
                 }
-                _ => {
-                    println!("--> Unknown rt_attr.rta_type: {}", attr.rt_attr.rta_type);
-                }
+                _ => {}
             }
         }
 
@@ -159,95 +157,70 @@ pub fn link_deserialize(buf: &[u8]) -> Result<Box<dyn Link>> {
             }
             libc::IFLA_ADDRESS => {
                 base.hw_addr = attr.value;
-                println!("IFLA_ADDRESS: {:02x?}", base.hw_addr);
             }
             libc::IFLA_IFNAME => {
                 base.name = String::from_utf8(attr.value[..attr.value.len() - 1].to_vec())?;
-                println!("IFLA_IFNAME: {}", base.name);
             }
             libc::IFLA_MTU => {
                 base.mtu = u32::from_ne_bytes(attr.value[..4].try_into()?);
-                println!("IFLA_MTU: {}", base.mtu);
             }
             libc::IFLA_LINK => {
                 base.parent_index = i32::from_ne_bytes(attr.value[..4].try_into()?);
-                println!("IFLA_LINK: {}", base.parent_index);
             }
             libc::IFLA_MASTER => {
                 base.master_index = i32::from_ne_bytes(attr.value[..4].try_into()?);
-                println!("IFLA_MASTER: {}", base.master_index);
             }
             libc::IFLA_TXQLEN => {
                 base.tx_queue_len = i32::from_ne_bytes(attr.value[..4].try_into()?);
-                println!("IFLA_TXQLEN: {}", base.tx_queue_len);
             }
             libc::IFLA_IFALIAS => {
                 base.alias = String::from_utf8(attr.value[..attr.value.len() - 1].to_vec())?;
-                println!("IFLA_IFALIAS: {}", base.alias);
             }
             libc::IFLA_STATS => {
                 // TODO
-                println!("IFLA_STATS: TODO");
             }
             libc::IFLA_STATS64 => {
                 // TODO
-                println!("IFLA_STATS64: TODO");
             }
             libc::IFLA_XDP => {
                 base.xdp = LinkXdp::parse(&attr.value);
-                println!("IFLA_XDP: {:?}", base.xdp);
             }
             libc::IFLA_PROTINFO | consts::NLA_F_NESTED => {
                 // TODO
-                println!("IFLA_PROTINFO: TODO");
             }
             libc::IFLA_OPERSTATE => {
                 base.oper_state = attr.value[0];
-                println!("IFLA_OPERSTATE: {}", base.oper_state);
             }
             libc::IFLA_PHYS_SWITCH_ID => {
                 base.phys_switch_id = i32::from_be_bytes(attr.value[..4].try_into()?);
-                println!("IFLA_PHYS_SWITCH_ID: {:?}", base.phys_switch_id);
             }
             libc::IFLA_LINK_NETNSID => {
                 base.netns_id = i32::from_ne_bytes(attr.value[..4].try_into()?);
-                println!("IFLA_LINK_NETNSID: {:?}", base.netns_id);
             }
             libc::IFLA_GSO_MAX_SIZE => {
                 base.gso_max_size = u32::from_ne_bytes(attr.value[..4].try_into()?);
-                println!("IFLA_GSO_MAX_SIZE: {:?}", base.gso_max_size);
             }
             libc::IFLA_GSO_MAX_SEGS => {
                 base.gso_max_segs = u32::from_ne_bytes(attr.value[..4].try_into()?);
-                println!("IFLA_GSO_MAX_SEGS: {:?}", base.gso_max_segs);
             }
             consts::IFLA_GRO_MAX_SIZE => {
                 base.gro_max_size = u32::from_ne_bytes(attr.value[..4].try_into()?);
-                println!("IFLA_GRO_MAX_SIZE: {:?}", base.gro_max_size);
             }
             libc::IFLA_VFINFO_LIST => {
                 // TODO
-                println!("IFLA_VFINFO_LIST: TODO");
             }
             libc::IFLA_NUM_TX_QUEUES => {
                 base.num_tx_queues = i32::from_ne_bytes(attr.value[..4].try_into()?);
-                println!("IFLA_NUM_TX_QUEUES: {:?}", base.num_tx_queues);
             }
             libc::IFLA_NUM_RX_QUEUES => {
                 base.num_rx_queues = i32::from_ne_bytes(attr.value[..4].try_into()?);
-                println!("IFLA_NUM_RX_QUEUES: {:?}", base.num_rx_queues);
             }
             libc::IFLA_GROUP => {
                 base.group = u32::from_ne_bytes(attr.value[..4].try_into()?);
-                println!("IFLA_GROUP: {:?}", base.group);
             }
-            _ => {
-                println!("Unknown attribute: {}", attr.rt_attr.rta_type);
-            }
+            _ => {}
         }
     }
-
-    println!("index: {:#?}", base);
 
     Ok(match &base.link_type[..] {
         "dummy" => Box::new(Kind::Dummy(base)),
@@ -282,19 +255,15 @@ fn extract_link_info(
         match info.rt_attr.rta_type {
             libc::IFLA_INFO_KIND => {
                 base.link_type = String::from_utf8(info.value[..info.value.len() - 1].to_vec())?;
-                println!("IFLA_INFO_KIND: {}", base.link_type);
             }
             libc::IFLA_INFO_DATA => {
                 data = NetlinkRouteAttr::map(&info.value)?;
-                println!("IFLA_INFO_DATA");
             }
             libc::IFLA_INFO_SLAVE_KIND => {
                 // TODO
-                println!("IFLA_INFO_SLAVE_KIND: TODO");
             }
             libc::IFLA_INFO_SLAVE_DATA => {
                 // TODO
-                println!("IFLA_INFO_SLAVE_DATA: TODO");
             }
             _ => {
                 println!("-> Unknown attribute: {}", info.rt_attr.rta_type);

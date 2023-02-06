@@ -33,11 +33,11 @@ impl SocketHandle {
             msg.ifi_index = base.index;
         }
 
+        // TODO: add more flags
         if base.flags & consts::IFF_UP != 0 {
             msg.ifi_flags = consts::IFF_UP;
             msg.ifi_change = consts::IFF_UP;
         }
-        // TODO: add more flags
 
         req.add_data(msg);
 
@@ -47,6 +47,14 @@ impl SocketHandle {
         ));
 
         req.add_data(name);
+
+        if base.hw_addr.len() > 0 {
+            let hw_addr = Box::new(NetlinkRouteAttr::new(
+                libc::IFLA_ADDRESS,
+                base.hw_addr.clone(),
+            ));
+            req.add_data(hw_addr);
+        }
 
         if base.mtu > 0 {
             let mtu = Box::new(NetlinkRouteAttr::new(
@@ -64,14 +72,6 @@ impl SocketHandle {
             req.add_data(tx_queue_len);
         }
 
-        if base.hw_addr.len() > 0 {
-            let hw_addr = Box::new(NetlinkRouteAttr::new(
-                libc::IFLA_ADDRESS,
-                base.hw_addr.clone(),
-            ));
-            req.add_data(hw_addr);
-        }
-
         if base.num_tx_queues > 0 {
             let num_tx_queues = Box::new(NetlinkRouteAttr::new(
                 libc::IFLA_NUM_TX_QUEUES,
@@ -87,8 +87,6 @@ impl SocketHandle {
             ));
             req.add_data(num_rx_queues);
         }
-
-        // TODO: add more attributes
 
         let mut link_info = Box::new(NetlinkRouteAttr::new(libc::IFLA_LINKINFO, vec![]));
 
@@ -122,7 +120,7 @@ impl SocketHandle {
 
         req.add_data(link_info);
 
-        let msgs = self.execute(&mut req, 0)?;
+        let _ = self.execute(&mut req, 0)?;
 
         Ok(())
     }
@@ -140,7 +138,7 @@ impl SocketHandle {
 
         req.add_data(msg);
 
-        let msgs = self.execute(&mut req, 0)?;
+        let _ = self.execute(&mut req, 0)?;
 
         Ok(())
     }
@@ -343,6 +341,7 @@ mod tests {
         attr.num_tx_queues = 4;
         attr.num_rx_queues = 8;
 
+        // TODO: need to set peer hw addr and peer ns
         let link = Kind::Veth {
             attrs: attr.clone(),
             peer_name: "bar".to_string(),
