@@ -7,19 +7,20 @@ use std::{
 };
 
 use crate::{
+    addr::SockAddrNetlink,
     consts,
     link::{LinkAttrs, Namespace},
     request::NetlinkRequestData,
-    SockAddrNetlink,
+    utils::align_of,
 };
 
-pub(crate) struct NetlinkSocket {
+pub struct NetlinkSocket {
     fd: RawFd,
     lsa: SockAddrNetlink,
 }
 
 impl NetlinkSocket {
-    pub(crate) fn new(protocol: i32, pid: u32, groups: u32) -> Result<Self> {
+    pub fn new(protocol: i32, pid: u32, groups: u32) -> Result<Self> {
         let fd = unsafe {
             libc::socket(
                 libc::AF_NETLINK,
@@ -45,7 +46,7 @@ impl NetlinkSocket {
         Ok(())
     }
 
-    pub(crate) fn send(&self, buf: &[u8]) -> Result<()> {
+    pub fn send(&self, buf: &[u8]) -> Result<()> {
         let (addr, addr_len) = self.lsa.as_raw();
         let buf_ptr = buf.as_ptr() as *const libc::c_void;
         let buf_len = buf.len() as libc::size_t;
@@ -56,7 +57,7 @@ impl NetlinkSocket {
         Ok(())
     }
 
-    pub(crate) fn recv(&self) -> Result<(Vec<NetlinkMessage>, libc::sockaddr_nl)> {
+    pub fn recv(&self) -> Result<(Vec<NetlinkMessage>, libc::sockaddr_nl)> {
         let mut from: libc::sockaddr_nl = unsafe { std::mem::zeroed() };
         let mut buf: [u8; consts::RECV_BUF_SIZE] = [0; consts::RECV_BUF_SIZE];
         let ret = unsafe {
@@ -76,7 +77,7 @@ impl NetlinkSocket {
         Ok((netlink_msgs, from))
     }
 
-    pub(crate) fn pid(&self) -> Result<u32> {
+    pub fn pid(&self) -> Result<u32> {
         let mut rsa: libc::sockaddr_nl = unsafe { std::mem::zeroed() };
         let ret = unsafe {
             libc::getsockname(
@@ -98,23 +99,23 @@ impl Drop for NetlinkSocket {
     }
 }
 
-pub(crate) struct NetlinkMessage {
-    pub(crate) header: NetlinkMessageHeader,
-    pub(crate) data: Vec<u8>,
+pub struct NetlinkMessage {
+    pub header: NetlinkMessageHeader,
+    pub data: Vec<u8>,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Serialize, Debug)]
-pub(crate) struct NetlinkMessageHeader {
-    pub(crate) nlmsg_len: u32,
-    pub(crate) nlmsg_type: u16,
-    nlmsg_flags: u16,
-    pub(crate) nlmsg_seq: u32,
-    pub(crate) nlmsg_pid: u32,
+pub struct NetlinkMessageHeader {
+    pub nlmsg_len: u32,
+    pub nlmsg_type: u16,
+    pub nlmsg_flags: u16,
+    pub nlmsg_seq: u32,
+    pub nlmsg_pid: u32,
 }
 
 impl NetlinkMessageHeader {
-    pub(crate) fn new(proto: u16, flags: i32) -> Self {
+    pub fn new(proto: u16, flags: i32) -> Self {
         Self {
             nlmsg_len: std::mem::size_of::<Self>() as u32,
             nlmsg_type: proto,
@@ -131,7 +132,7 @@ impl NetlinkMessage {
 
         while buf.len() >= consts::NLMSG_HDRLEN {
             let header = unsafe { *(buf.as_ptr() as *const NetlinkMessageHeader) };
-            let len = Self::nlm_align_of(header.nlmsg_len as usize);
+            let len = align_of(header.nlmsg_len as usize, consts::NLMSG_ALIGNTO);
             let data = buf[consts::NLMSG_HDRLEN..header.nlmsg_len as usize].to_vec();
 
             msgs.push(Self { header, data });
@@ -139,10 +140,6 @@ impl NetlinkMessage {
         }
 
         Ok(msgs)
-    }
-
-    fn nlm_align_of(len: usize) -> usize {
-        (len + consts::NLMSG_ALIGNTO - 1) & !(consts::NLMSG_ALIGNTO - 1)
     }
 }
 
@@ -163,13 +160,13 @@ impl fmt::Debug for NetlinkMessage {
 
 #[repr(C)]
 #[derive(Clone, Copy, Default, Debug, Serialize)]
-pub(crate) struct IfInfoMessage {
-    ifi_family: u8,
+pub struct IfInfoMessage {
+    pub ifi_family: u8,
     _ifi_pad: u8,
-    ifi_type: u16,
-    pub(crate) ifi_index: i32,
-    pub(crate) ifi_flags: u32,
-    pub(crate) ifi_change: u32,
+    pub ifi_type: u16,
+    pub ifi_index: i32,
+    pub ifi_flags: u32,
+    pub ifi_change: u32,
 }
 
 impl NetlinkRequestData for IfInfoMessage {
@@ -183,29 +180,29 @@ impl NetlinkRequestData for IfInfoMessage {
 }
 
 impl IfInfoMessage {
-    pub(crate) fn new(family: i32) -> Self {
+    pub fn new(family: i32) -> Self {
         Self {
             ifi_family: family as u8,
             ..Default::default()
         }
     }
 
-    pub(crate) fn deserialize(buf: &[u8]) -> Result<Self> {
+    pub fn deserialize(buf: &[u8]) -> Result<Self> {
         Ok(unsafe { *(buf[..consts::IF_INFO_MSG_SIZE].as_ptr() as *const Self) })
     }
 }
 
-pub(crate) struct NetlinkRouteAttr {
-    pub(crate) rt_attr: RtAttr,
-    pub(crate) value: Vec<u8>,
-    children: Option<Vec<Box<dyn NetlinkRequestData>>>,
+pub struct NetlinkRouteAttr {
+    pub rt_attr: RtAttr,
+    pub value: Vec<u8>,
+    pub children: Option<Vec<Box<dyn NetlinkRequestData>>>,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct RtAttr {
-    pub(crate) rta_len: u16,
-    pub(crate) rta_type: u16,
+pub struct RtAttr {
+    pub rta_len: u16,
+    pub rta_type: u16,
 }
 
 impl NetlinkRequestData for NetlinkRouteAttr {
@@ -219,7 +216,7 @@ impl NetlinkRequestData for NetlinkRouteAttr {
         buf.extend_from_slice(&self.rt_attr.rta_type.to_ne_bytes());
         buf.extend_from_slice(&self.value);
 
-        let align_to = Self::rta_align_of(buf.len());
+        let align_to = align_of(buf.len(), consts::RTA_ALIGNTO);
         if buf.len() < align_to {
             buf.resize(align_to, 0);
         }
@@ -238,7 +235,7 @@ impl NetlinkRequestData for NetlinkRouteAttr {
 }
 
 impl NetlinkRouteAttr {
-    pub(crate) fn new(rta_type: u16, value: Vec<u8>) -> Self {
+    pub fn new(rta_type: u16, value: Vec<u8>) -> Self {
         Self {
             rt_attr: RtAttr {
                 rta_len: (consts::RT_ATTR_SIZE + value.len()) as u16,
@@ -254,7 +251,7 @@ impl NetlinkRouteAttr {
 
         while buf.len() >= consts::RT_ATTR_SIZE {
             let rt_attr = unsafe { *(buf.as_ptr() as *const RtAttr) };
-            let len = Self::rta_align_of(rt_attr.rta_len as usize);
+            let len = align_of(rt_attr.rta_len as usize, consts::RTA_ALIGNTO);
             let value = buf[consts::RT_ATTR_SIZE..rt_attr.rta_len as usize].to_vec();
 
             attrs.insert(rt_attr.rta_type, value);
@@ -264,12 +261,12 @@ impl NetlinkRouteAttr {
         Ok(attrs)
     }
 
-    pub(crate) fn from(mut buf: &[u8]) -> Result<Vec<Self>> {
+    pub fn from(mut buf: &[u8]) -> Result<Vec<Self>> {
         let mut attrs = Vec::new();
 
         while buf.len() >= consts::RT_ATTR_SIZE {
             let rt_attr = unsafe { *(buf.as_ptr() as *const RtAttr) };
-            let len = Self::rta_align_of(rt_attr.rta_len as usize);
+            let len = align_of(rt_attr.rta_len as usize, consts::RTA_ALIGNTO);
             let value = buf[consts::RT_ATTR_SIZE..rt_attr.rta_len as usize].to_vec();
 
             attrs.push(Self {
@@ -283,11 +280,7 @@ impl NetlinkRouteAttr {
         Ok(attrs)
     }
 
-    fn rta_align_of(len: usize) -> usize {
-        (len + consts::RTA_ALIGNTO - 1) & !(consts::RTA_ALIGNTO - 1)
-    }
-
-    pub(crate) fn add_child(&mut self, rta_type: u16, value: Vec<u8>) {
+    pub fn add_child(&mut self, rta_type: u16, value: Vec<u8>) {
         if let None = self.children {
             self.children = Some(Vec::new());
         }
@@ -307,7 +300,7 @@ impl NetlinkRouteAttr {
         self.children.as_mut().unwrap().push(attr);
     }
 
-    pub(crate) fn add_veth_attrs(
+    pub fn add_veth_attrs(
         &mut self,
         base: &LinkAttrs,
         peer_name: &str,
@@ -363,7 +356,7 @@ impl NetlinkRouteAttr {
         self.add_child_from_attr(data);
     }
 
-    pub(crate) fn add_bridge_attrs(
+    pub fn add_bridge_attrs(
         &mut self,
         hello_time: &Option<u32>,
         ageing_time: &Option<u32>,

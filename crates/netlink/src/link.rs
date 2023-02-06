@@ -8,12 +8,12 @@ use crate::{
     socket::{IfInfoMessage, NetlinkRouteAttr},
 };
 
-pub(crate) enum Namespace {
+pub enum Namespace {
     Pid(i32),
     Fd(i32),
 }
 
-pub(crate) enum Kind {
+pub enum Kind {
     Device(LinkAttrs),
     Dummy(LinkAttrs),
     Bridge {
@@ -31,24 +31,24 @@ pub(crate) enum Kind {
     },
 }
 
-pub(crate) trait Link {
+pub trait Link {
     fn link_type(&self) -> String;
     fn attrs(&self) -> &LinkAttrs;
     fn kind(&self) -> &Kind;
 }
 
 #[derive(Debug, Default, Clone)]
-pub(crate) struct LinkAttrs {
-    pub(crate) link_type: String,
-    pub(crate) index: i32,
-    pub(crate) name: String,
+pub struct LinkAttrs {
+    pub link_type: String,
+    pub index: i32,
+    pub name: String,
     hw_addr: Vec<u8>,
-    pub(crate) mtu: u32,
-    pub(crate) flags: u32,
+    pub mtu: u32,
+    pub flags: u32,
     raw_flags: u32,
     parent_index: i32,
     master_index: i32,
-    pub(crate) tx_queue_len: i32,
+    pub tx_queue_len: i32,
     alias: String,
     xdp: LinkXdp,
     prot_info: String,
@@ -59,14 +59,14 @@ pub(crate) struct LinkAttrs {
     gso_max_segs: u32,
     gro_max_size: u32,
     vfs: String,
-    pub(crate) num_tx_queues: i32,
-    pub(crate) num_rx_queues: i32,
+    pub num_tx_queues: i32,
+    pub num_rx_queues: i32,
     group: u32,
     statistics: String,
 }
 
 impl LinkAttrs {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 
@@ -145,7 +145,7 @@ impl LinkXdp {
     }
 }
 
-pub(crate) fn link_deserialize(buf: &[u8]) -> Result<Box<dyn Link>> {
+pub fn link_deserialize(buf: &[u8]) -> Result<Box<dyn Link>> {
     let if_info_msg = IfInfoMessage::deserialize(buf)?;
     let rt_attrs = NetlinkRouteAttr::from(&buf[if_info_msg.len()..])?;
 

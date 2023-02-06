@@ -1,12 +1,7 @@
-mod addr;
-
-pub mod socket;
-pub use addr::SockAddrNetlink;
-
-mod link;
-
-mod request;
-
-mod handle;
-
+pub mod addr;
 pub mod consts;
+mod handle;
+mod link;
+mod request;
+pub mod socket;
+pub mod utils;

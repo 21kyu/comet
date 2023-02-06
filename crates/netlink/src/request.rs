@@ -2,19 +2,19 @@ use anyhow::Result;
 
 use crate::socket::NetlinkMessageHeader;
 
-pub(crate) trait NetlinkRequestData {
+pub trait NetlinkRequestData {
     fn len(&self) -> usize;
     fn serialize(&self) -> Result<Vec<u8>>;
 }
 
-pub(crate) struct NetlinkRequest {
-    pub(crate) header: NetlinkMessageHeader,
-    data: Option<Vec<Box<dyn NetlinkRequestData>>>,
-    raw_data: Option<Vec<u8>>,
+pub struct NetlinkRequest {
+    pub header: NetlinkMessageHeader,
+    pub data: Option<Vec<Box<dyn NetlinkRequestData>>>,
+    pub raw_data: Option<Vec<u8>>,
 }
 
 impl NetlinkRequest {
-    pub(crate) fn new(proto: u16, flags: i32) -> Self {
+    pub fn new(proto: u16, flags: i32) -> Self {
         Self {
             header: NetlinkMessageHeader::new(proto, flags),
             data: None,
@@ -22,7 +22,7 @@ impl NetlinkRequest {
         }
     }
 
-    pub(crate) fn serialize(&mut self) -> Result<Vec<u8>> {
+    pub fn serialize(&mut self) -> Result<Vec<u8>> {
         let mut buf = Vec::new();
         buf.extend_from_slice(bincode::serialize(&self.header)?.as_slice());
         if let Some(data) = &self.data {
@@ -40,7 +40,7 @@ impl NetlinkRequest {
         Ok(buf)
     }
 
-    pub(crate) fn add_data(&mut self, data: Box<dyn NetlinkRequestData>) {
+    pub fn add_data(&mut self, data: Box<dyn NetlinkRequestData>) {
         if self.data.is_none() {
             self.data = Some(Vec::new());
         }
@@ -48,7 +48,7 @@ impl NetlinkRequest {
         self.data.as_mut().unwrap().push(data);
     }
 
-    pub(crate) fn add_raw_data(&mut self, mut data: Vec<u8>) {
+    pub fn add_raw_data(&mut self, mut data: Vec<u8>) {
         if self.raw_data.is_none() {
             self.raw_data = Some(Vec::new());
         }
