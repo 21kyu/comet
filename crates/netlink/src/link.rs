@@ -26,7 +26,7 @@ pub enum Kind {
     Veth {
         attrs: LinkAttrs,
         peer_name: String,
-        peer_hw_addr: Vec<u8>,
+        peer_hw_addr: Option<Vec<u8>>,
         peer_ns: Option<Namespace>,
     },
 }
@@ -42,27 +42,27 @@ pub struct LinkAttrs {
     pub link_type: String,
     pub index: i32,
     pub name: String,
-    hw_addr: Vec<u8>,
+    pub hw_addr: Vec<u8>,
     pub mtu: u32,
     pub flags: u32,
-    raw_flags: u32,
-    parent_index: i32,
-    master_index: i32,
+    pub raw_flags: u32,
+    pub parent_index: i32,
+    pub master_index: i32,
     pub tx_queue_len: i32,
-    alias: String,
-    xdp: LinkXdp,
-    prot_info: String,
-    oper_state: u8,
-    phys_switch_id: i32,
-    netns_id: i32,
-    gso_max_size: u32,
-    gso_max_segs: u32,
-    gro_max_size: u32,
-    vfs: String,
+    pub alias: String,
+    pub xdp: LinkXdp,
+    pub prot_info: String,
+    pub oper_state: u8,
+    pub phys_switch_id: i32,
+    pub netns_id: i32,
+    pub gso_max_size: u32,
+    pub gso_max_segs: u32,
+    pub gro_max_size: u32,
+    pub vfs: String,
     pub num_tx_queues: i32,
     pub num_rx_queues: i32,
-    group: u32,
-    statistics: String,
+    pub group: u32,
+    pub statistics: String,
 }
 
 impl LinkAttrs {
@@ -103,7 +103,7 @@ impl Link for Kind {
 }
 
 #[derive(Debug, Default, Clone)]
-struct LinkXdp {
+pub struct LinkXdp {
     fd: i32,
     attached: bool,
     attache_mode: u32,
@@ -263,10 +263,9 @@ pub fn link_deserialize(buf: &[u8]) -> Result<Box<dyn Link>> {
             vlan_filtering: data.get(&consts::IFLA_BR_VLAN_FILTERING).map(|v| v[0] == 1),
         }),
         "veth" => Box::new(Kind::Veth {
-            // TODO: need to parse peer info..?
             attrs: base,
-            peer_name: "".to_string(),
-            peer_hw_addr: vec![],
+            peer_name: Default::default(),
+            peer_hw_addr: None,
             peer_ns: None,
         }),
         "device" | _ => Box::new(Kind::Device(base)),

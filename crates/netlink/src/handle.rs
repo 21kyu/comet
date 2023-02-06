@@ -5,6 +5,7 @@ use crate::{
     link::{self, Kind, Link, LinkAttrs},
     request::NetlinkRequest,
     socket::{IfInfoMessage, NetlinkRouteAttr, NetlinkSocket},
+    utils::zero_terminated,
 };
 
 pub struct SocketHandle {
@@ -40,12 +41,52 @@ impl SocketHandle {
 
         req.add_data(msg);
 
-        let mut name = base.name.as_bytes().to_vec();
-        name.push(0);
-
-        let name = Box::new(NetlinkRouteAttr::new(libc::IFLA_IFNAME, name));
+        let name = Box::new(NetlinkRouteAttr::new(
+            libc::IFLA_IFNAME,
+            zero_terminated(&base.name),
+        ));
 
         req.add_data(name);
+
+        if base.mtu > 0 {
+            let mtu = Box::new(NetlinkRouteAttr::new(
+                libc::IFLA_MTU,
+                base.mtu.to_ne_bytes().to_vec(),
+            ));
+            req.add_data(mtu);
+        }
+
+        if base.tx_queue_len > 0 {
+            let tx_queue_len = Box::new(NetlinkRouteAttr::new(
+                libc::IFLA_TXQLEN,
+                base.tx_queue_len.to_ne_bytes().to_vec(),
+            ));
+            req.add_data(tx_queue_len);
+        }
+
+        if base.hw_addr.len() > 0 {
+            let hw_addr = Box::new(NetlinkRouteAttr::new(
+                libc::IFLA_ADDRESS,
+                base.hw_addr.clone(),
+            ));
+            req.add_data(hw_addr);
+        }
+
+        if base.num_tx_queues > 0 {
+            let num_tx_queues = Box::new(NetlinkRouteAttr::new(
+                libc::IFLA_NUM_TX_QUEUES,
+                base.num_tx_queues.to_ne_bytes().to_vec(),
+            ));
+            req.add_data(num_tx_queues);
+        }
+
+        if base.num_rx_queues > 0 {
+            let num_rx_queues = Box::new(NetlinkRouteAttr::new(
+                libc::IFLA_NUM_RX_QUEUES,
+                base.num_rx_queues.to_ne_bytes().to_vec(),
+            ));
+            req.add_data(num_rx_queues);
+        }
 
         // TODO: add more attributes
 
@@ -54,16 +95,8 @@ impl SocketHandle {
         link_info.add_child(libc::IFLA_INFO_KIND, link.link_type().as_bytes().to_vec());
 
         match link.kind() {
-            Kind::Veth {
-                attrs,
-                peer_name,
-                peer_hw_addr,
-                peer_ns,
-            } => {
-                link_info.add_veth_attrs(base, peer_name, peer_hw_addr, peer_ns);
-            }
             Kind::Bridge {
-                attrs,
+                attrs: _,
                 hello_time,
                 ageing_time,
                 multicast_snooping,
@@ -75,6 +108,14 @@ impl SocketHandle {
                     multicast_snooping,
                     vlan_filtering,
                 );
+            }
+            Kind::Veth {
+                attrs: _,
+                peer_name,
+                peer_hw_addr,
+                peer_ns,
+            } => {
+                link_info.add_veth_attrs(base, peer_name, peer_hw_addr, peer_ns);
             }
             _ => {}
         }
@@ -208,6 +249,42 @@ mod tests {
     }
 
     #[test]
+    fn test_link_add_modify_del() {
+        test_setup!();
+        let mut handle = super::SocketHandle::new(libc::NETLINK_ROUTE).unwrap();
+        let mut attr = LinkAttrs::new();
+        attr.name = "foo".to_string();
+
+        let link = Kind::Dummy(attr.clone());
+
+        handle
+            .link_new(
+                &link,
+                libc::NLM_F_CREATE | libc::NLM_F_EXCL | libc::NLM_F_ACK,
+            )
+            .unwrap();
+
+        let link = handle.link_get(&attr).unwrap();
+        assert_eq!(link.attrs().name, "foo");
+
+        attr = link.attrs().clone();
+        attr.name = "bar".to_string();
+
+        let link = Kind::Dummy(attr.clone());
+
+        handle.link_new(&link, libc::NLM_F_ACK).unwrap();
+
+        let link = handle.link_get(&attr).unwrap();
+        assert_eq!(link.attrs().name, "bar");
+
+        handle.link_del(&*link).unwrap();
+
+        let res = handle.link_get(&attr).err();
+        println!("{:?}", res);
+        assert!(res.is_some());
+    }
+
+    #[test]
     fn test_link_bridge() {
         test_setup!();
         let mut handle = super::SocketHandle::new(libc::NETLINK_ROUTE).unwrap();
@@ -256,13 +333,22 @@ mod tests {
     }
 
     #[test]
-    fn test_link_add_modify_del() {
+    fn test_link_veth() {
         test_setup!();
         let mut handle = super::SocketHandle::new(libc::NETLINK_ROUTE).unwrap();
         let mut attr = LinkAttrs::new();
         attr.name = "foo".to_string();
+        attr.mtu = 1400;
+        attr.tx_queue_len = 100;
+        attr.num_tx_queues = 4;
+        attr.num_rx_queues = 8;
 
-        let link = Kind::Dummy(attr.clone());
+        let link = Kind::Veth {
+            attrs: attr.clone(),
+            peer_name: "bar".to_string(),
+            peer_hw_addr: None,
+            peer_ns: None,
+        };
 
         handle
             .link_new(
@@ -272,22 +358,31 @@ mod tests {
             .unwrap();
 
         let link = handle.link_get(&attr).unwrap();
+
+        let peer = handle
+            .link_get(&LinkAttrs {
+                name: "bar".to_string(),
+                ..Default::default()
+            })
+            .unwrap();
+
+        assert_eq!(link.attrs().link_type, "veth");
         assert_eq!(link.attrs().name, "foo");
+        assert_eq!(link.attrs().mtu, 1400);
+        assert_eq!(link.attrs().tx_queue_len, 100);
+        assert_eq!(link.attrs().num_tx_queues, 4);
+        assert_eq!(link.attrs().num_rx_queues, 8);
 
-        attr = link.attrs().clone();
-        attr.name = "bar".to_string();
+        assert_eq!(peer.attrs().link_type, "veth");
+        assert_eq!(peer.attrs().name, "bar");
+        assert_eq!(peer.attrs().mtu, 1400);
+        assert_eq!(peer.attrs().tx_queue_len, 100);
+        assert_eq!(peer.attrs().num_tx_queues, 4);
+        assert_eq!(peer.attrs().num_rx_queues, 8);
 
-        let link = Kind::Dummy(attr.clone());
-
-        handle.link_new(&link, libc::NLM_F_ACK).unwrap();
-
-        let link = handle.link_get(&attr).unwrap();
-        assert_eq!(link.attrs().name, "bar");
-
-        handle.link_del(&*link).unwrap();
+        handle.link_del(&*peer).unwrap();
 
         let res = handle.link_get(&attr).err();
-        println!("{:?}", res);
         assert!(res.is_some());
     }
 

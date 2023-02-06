@@ -11,7 +11,7 @@ use crate::{
     consts,
     link::{LinkAttrs, Namespace},
     request::NetlinkRequestData,
-    utils::align_of,
+    utils::{align_of, zero_terminated},
 };
 
 pub struct NetlinkSocket {
@@ -304,7 +304,7 @@ impl NetlinkRouteAttr {
         &mut self,
         base: &LinkAttrs,
         peer_name: &str,
-        peer_hw_addr: &[u8],
+        peer_hw_addr: &Option<Vec<u8>>,
         peer_ns: &Option<Namespace>,
     ) {
         let mut data = Box::new(NetlinkRouteAttr::new(libc::IFLA_INFO_DATA, vec![]));
@@ -312,13 +312,13 @@ impl NetlinkRouteAttr {
         let peer_if_info_msg = Box::new(IfInfoMessage::new(libc::AF_UNSPEC));
 
         peer_info.add_child_from_attr(peer_if_info_msg);
-        peer_info.add_child(libc::IFLA_IFNAME, peer_name.as_bytes().to_vec());
+        peer_info.add_child(libc::IFLA_IFNAME, zero_terminated(peer_name));
 
         if base.mtu > 0 {
             peer_info.add_child(libc::IFLA_MTU, base.mtu.to_ne_bytes().to_vec());
         }
 
-        if base.tx_queue_len > 0 {
+        if base.tx_queue_len >= 0 {
             peer_info.add_child(libc::IFLA_TXQLEN, base.tx_queue_len.to_ne_bytes().to_vec());
         }
 
@@ -336,8 +336,8 @@ impl NetlinkRouteAttr {
             );
         }
 
-        if peer_hw_addr.len() > 0 {
-            peer_info.add_child(libc::IFLA_ADDRESS, peer_hw_addr.to_vec());
+        if let Some(hw_addr) = peer_hw_addr {
+            peer_info.add_child(libc::IFLA_ADDRESS, hw_addr.to_vec());
         }
 
         match peer_ns {
