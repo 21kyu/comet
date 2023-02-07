@@ -24,14 +24,15 @@ impl NetlinkRequest {
 
     pub fn serialize(&mut self) -> Result<Vec<u8>> {
         let mut buf = Vec::new();
-        buf.extend_from_slice(bincode::serialize(&self.header)?.as_slice());
+        buf.extend(bincode::serialize(&self.header)?);
+
         if let Some(data) = &self.data {
-            data.iter().for_each(|d| {
-                buf.extend_from_slice(&d.serialize().unwrap());
-            });
+            for d in data {
+                buf.extend(d.serialize()?);
+            }
         }
         if let Some(data) = &self.raw_data {
-            buf.extend_from_slice(data);
+            buf.extend(data);
         }
 
         let len = buf.len() as u16;
@@ -41,19 +42,21 @@ impl NetlinkRequest {
     }
 
     pub fn add_data(&mut self, data: Box<dyn NetlinkRequestData>) {
-        if self.data.is_none() {
-            self.data = Some(Vec::new());
-        }
         self.header.nlmsg_len += data.len() as u32;
-        self.data.as_mut().unwrap().push(data);
+        if self.data.is_none() {
+            self.data = Some(vec![data]);
+        } else if let Some(d) = &mut self.data {
+            d.push(data);
+        }
     }
 
-    pub fn add_raw_data(&mut self, mut data: Vec<u8>) {
-        if self.raw_data.is_none() {
-            self.raw_data = Some(Vec::new());
-        }
+    pub fn add_raw_data(&mut self, data: Vec<u8>) {
         self.header.nlmsg_len += data.len() as u32;
-        self.raw_data.as_mut().unwrap().append(&mut data);
+        if self.raw_data.is_none() {
+            self.raw_data = Some(data);
+        } else if let Some(d) = &mut self.raw_data {
+            d.extend(data);
+        }
     }
 }
 
@@ -98,7 +101,7 @@ mod tests {
         req.add_data(Box::new(name));
 
         let buf = req.serialize().unwrap();
-        assert_eq!(buf.len(), 38);
+        assert_eq!(buf.len(), 40);
         assert_eq!(req.header.nlmsg_len, 38);
     }
 }

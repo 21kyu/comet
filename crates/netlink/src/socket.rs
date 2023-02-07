@@ -299,23 +299,25 @@ impl NetlinkRouteAttr {
     }
 
     pub fn add_child(&mut self, rta_type: u16, value: Vec<u8>) {
-        if let None = self.children {
-            self.children = Some(Vec::new());
-        }
         let attr = Box::new(NetlinkRouteAttr::new(rta_type, value));
         self.rt_attr.rta_len += attr.len() as u16;
-        self.children.as_mut().unwrap().push(attr);
+
+        match &mut self.children {
+            None => self.children = Some(vec![attr]),
+            Some(children) => children.push(attr),
+        }
     }
 
     fn add_child_from_attr<T>(&mut self, attr: Box<T>)
     where
         T: NetlinkRequestData + 'static,
     {
-        if let None = self.children {
-            self.children = Some(Vec::new());
-        }
         self.rt_attr.rta_len += attr.len() as u16;
-        self.children.as_mut().unwrap().push(attr);
+
+        match &mut self.children {
+            None => self.children = Some(vec![attr]),
+            Some(children) => children.push(attr),
+        }
     }
 
     pub fn add_veth_attrs(

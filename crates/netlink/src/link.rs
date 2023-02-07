@@ -116,30 +116,30 @@ impl LinkXdp {
         Self::default()
     }
 
-    fn parse(data: &[u8]) -> Self {
+    fn parse(data: &[u8]) -> Result<Self> {
         let mut xdp = Self::new();
 
-        let rt_attrs = NetlinkRouteAttr::from(data).unwrap();
+        let rt_attrs = NetlinkRouteAttr::from(data)?;
         for attr in rt_attrs {
             match attr.rt_attr.rta_type {
                 consts::IFLA_XDP_FD => {
-                    xdp.fd = i32::from_ne_bytes(attr.value[..4].try_into().unwrap());
+                    xdp.fd = i32::from_ne_bytes(attr.value[..4].try_into()?);
                 }
                 consts::IFLA_XDP_ATTACHED => {
-                    xdp.attache_mode = attr.value[0].try_into().unwrap();
+                    xdp.attache_mode = attr.value[0].try_into()?;
                     xdp.attached = attr.value[0] != 0;
                 }
                 consts::IFLA_XDP_FLAGS => {
-                    xdp.flags = u32::from_ne_bytes(attr.value[..4].try_into().unwrap());
+                    xdp.flags = u32::from_ne_bytes(attr.value[..4].try_into()?);
                 }
                 consts::IFLA_XDP_PROG_ID => {
-                    xdp.prog_id = u32::from_ne_bytes(attr.value[..4].try_into().unwrap());
+                    xdp.prog_id = u32::from_ne_bytes(attr.value[..4].try_into()?);
                 }
                 _ => {}
             }
         }
 
-        xdp
+        Ok(xdp)
     }
 }
 
@@ -183,7 +183,7 @@ pub fn link_deserialize(buf: &[u8]) -> Result<Box<dyn Link>> {
                 // TODO
             }
             libc::IFLA_XDP => {
-                base.xdp = LinkXdp::parse(&attr.value);
+                base.xdp = LinkXdp::parse(&attr.value)?;
             }
             libc::IFLA_PROTINFO | consts::NLA_F_NESTED => {
                 // TODO
@@ -228,10 +228,10 @@ pub fn link_deserialize(buf: &[u8]) -> Result<Box<dyn Link>> {
             attrs: base,
             hello_time: data
                 .get(&consts::IFLA_BR_HELLO_TIME)
-                .map(|v| u32::from_ne_bytes(v[..4].try_into().unwrap())),
+                .map(|v| u32::from_ne_bytes(v[..4].try_into().unwrap_or([0; 4]))),
             ageing_time: data
                 .get(&consts::IFLA_BR_AGEING_TIME)
-                .map(|v| u32::from_ne_bytes(v[..4].try_into().unwrap())),
+                .map(|v| u32::from_ne_bytes(v[..4].try_into().unwrap_or([0; 4]))),
             multicast_snooping: data.get(&consts::IFLA_BR_MCAST_SNOOPING).map(|v| v[0] == 1),
             vlan_filtering: data.get(&consts::IFLA_BR_VLAN_FILTERING).map(|v| v[0] == 1),
         }),

@@ -48,13 +48,14 @@ impl SocketHandle {
 
         req.add_data(name);
 
-        if base.hw_addr.len() > 0 {
-            let hw_addr = Box::new(NetlinkRouteAttr::new(
-                libc::IFLA_ADDRESS,
-                base.hw_addr.clone(),
-            ));
-            req.add_data(hw_addr);
-        }
+        // TODO
+        // if base.hw_addr.len() > 0 {
+        //     let hw_addr = Box::new(NetlinkRouteAttr::new(
+        //         libc::IFLA_ADDRESS,
+        //         base.hw_addr.clone(),
+        //     ));
+        //     req.add_data(hw_addr);
+        // }
 
         if base.mtu > 0 {
             let mtu = Box::new(NetlinkRouteAttr::new(
@@ -153,9 +154,6 @@ impl SocketHandle {
 
         req.add_data(msg);
 
-        //let ext_mask = Box::new(NetlinkRouteAttr::new(libc::IFLA_EXT_MASK, vec![0, 0, 0, 1]));
-        //req.add_data(ext_mask);
-
         if attr.name != "" {
             let name = Box::new(NetlinkRouteAttr::new(
                 libc::IFLA_IFNAME,
@@ -180,6 +178,8 @@ impl SocketHandle {
         };
 
         let buf = req.serialize()?;
+
+        println!("buf: {:?}", buf);
 
         self.socket.send(&buf)?;
 
@@ -212,7 +212,7 @@ impl SocketHandle {
 
                 match m.header.nlmsg_type {
                     consts::NLMSG_DONE | consts::NLMSG_ERROR => {
-                        let err_no = i32::from_ne_bytes(m.data[0..4].try_into().unwrap());
+                        let err_no = i32::from_ne_bytes(m.data[0..4].try_into()?);
 
                         if err_no == 0 {
                             break 'done;
