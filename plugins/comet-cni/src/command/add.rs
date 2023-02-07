@@ -67,12 +67,13 @@ pub fn add(cni_if_name: &str, container_id: &str, subnet: &str, netns: &str) -> 
 
 #[cfg(test)]
 mod tests {
-    use network::run_command;
+    use network::{run_command, test_setup};
 
     use crate::command::add::add;
 
     #[test]
     fn add_test() {
+        test_setup!();
         let cni_if_name = "eth0";
         let container_id = "123456789";
         let subnet = "10.244.0.0/24";

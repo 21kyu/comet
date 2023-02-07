@@ -11,6 +11,18 @@ macro_rules! run_command {
     };
 }
 
+// TODO: move this macro to more appropriate place
+#[macro_export]
+macro_rules! test_setup {
+    () => {
+        if !nix::unistd::geteuid().is_root() {
+            eprintln!("Test skipped, must be run as root");
+            return;
+        }
+        nix::sched::unshare(nix::sched::CloneFlags::CLONE_NEWNET).unwrap();
+    };
+}
+
 pub fn add_link(if_name: &str, link_type: &str) -> Result<()> {
     let out = run_command!("ip", "link", "add", if_name, "type", link_type);
 
@@ -143,6 +155,7 @@ mod tests {
 
     #[test]
     fn get_mac_addr_test() {
+        test_setup!();
         let if_name = "cni0";
 
         run_command!("ip", "link", "add", if_name, "type", "bridge");
@@ -155,6 +168,7 @@ mod tests {
 
     #[test]
     fn get_ip_addr_test() {
+        test_setup!();
         let if_name = "cni0";
 
         run_command!("ip", "link", "add", if_name, "type", "bridge");

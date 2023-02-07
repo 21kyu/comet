@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 network = { version = "0.0.1", path = "../../network" }
+netlink = { version = "0.0.1", path = "../../crates/netlink" }
 anyhow = "1.0.68"
 nix = "0.26.1"
 serde = { version = "1.0.152", features = ["derive"] }

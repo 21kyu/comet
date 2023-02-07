@@ -65,15 +65,16 @@ pub fn release_veth(if_name: &str, netns: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use network::run_command;
+    use network::{run_command, test_setup};
 
     use crate::connector::veth::{create_if_name, setup_veth};
 
     #[test]
     fn veth_test() {
+        test_setup!();
         let br_if_name = "cni0";
         let cni_if_name = "eth0";
-        let cont_id = "123456789";
+        let cont_id = "asdf123456789";
         let subnet = "10.244.0.0/24";
         let netns_path = &format!("/var/run/netns/{}", cont_id);
 

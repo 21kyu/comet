@@ -478,10 +478,6 @@ mod tests {
 
         'done: loop {
             let (netlink_msgs, from) = s.recv().unwrap();
-            println!(
-                "received from {} {} {}",
-                from.nl_family, from.nl_pid, from.nl_groups
-            );
 
             if from.nl_pid != consts::PID_KERNEL {
                 println!("received message from unknown source");
@@ -489,8 +485,6 @@ mod tests {
             }
 
             for m in netlink_msgs {
-                println!("received message: {:?}", m);
-
                 if m.header.nlmsg_pid != pid {
                     println!("received message with wrong pid");
                     continue;
@@ -512,12 +506,8 @@ mod tests {
             }
         }
 
-        println!("res: {:04X?}", res[3]);
-        println!("res.len(): {}", res.len());
-
         res.iter().for_each(|r| {
-            let ifi = IfInfoMessage::deserialize(r).unwrap();
-            println!("ifi: {:?}", ifi);
+            let _ = IfInfoMessage::deserialize(r).unwrap();
         });
     }
 }

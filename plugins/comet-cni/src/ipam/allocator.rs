@@ -67,7 +67,7 @@ pub fn release_ip(if_name: &str, ip_store_path: &str) -> Result<()> {
 mod tests {
     use std::fs;
 
-    use network::run_command;
+    use network::{run_command, test_setup};
 
     use crate::ipam::allocator::release_ip;
 
@@ -109,6 +109,7 @@ mod tests {
 
     #[test]
     fn release_ip_test() {
+        test_setup!();
         let if_name = "cni0";
         let ip_store_path = "/tmp/release_ip_test";
 
