@@ -53,7 +53,7 @@ pub fn allocate_ip(subnet: &str, ip_store_path: &str) -> Result<(Ipv4Addr, Ipv4A
 
 pub fn release_ip(if_name: &str, ip_store_path: &str) -> Result<()> {
     let ip_addr = get_ip_addr(if_name)?;
-    let opt = format!("/{}/d", ip_addr);
+    let opt = format!("/{ip_addr}/d");
     let out = run_command!("sed", "-i", &opt, ip_store_path);
 
     if let false = out.status.success() {
@@ -123,7 +123,7 @@ mod tests {
 
         let reserved_ips = get_reserved_ips(ip_store_path).unwrap();
 
-        println!("{:?}", reserved_ips);
+        println!("{reserved_ips:?}");
         assert_eq!(reserved_ips.len(), 2);
     }
 }

@@ -88,7 +88,7 @@ pub fn set_link_name(peer_if_name: &str, cont_if_name: &str) -> Result<()> {
 }
 
 pub fn add_addr(cont_ip: Ipv4Addr, subnet_mask_size: &str, if_name: &str) -> Result<()> {
-    let ip = format!("{}/{}", cont_ip, subnet_mask_size);
+    let ip = format!("{cont_ip}/{subnet_mask_size}");
     let out = run_command!("ip", "addr", "add", &ip, "dev", if_name);
 
     match out.status.success() {

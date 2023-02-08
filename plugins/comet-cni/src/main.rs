@@ -1,14 +1,14 @@
 pub mod command;
 pub mod connector;
 pub mod ipam;
-pub mod logging;
+pub mod log;
 
 use anyhow::{Error, Result};
 use serde::Deserialize;
 use std::io::BufRead;
 use std::{env, io};
 
-use crate::logging::logging::log;
+use crate::log::logging::log;
 
 #[derive(Debug)]
 struct Opts {
@@ -51,8 +51,8 @@ impl Opts {
 
 #[derive(Debug, Deserialize)]
 struct Config {
-    name: String,
-    network: String,
+    // name: String,
+    // network: String,
     subnet: String,
 }
 
@@ -72,7 +72,7 @@ fn main() {
     let opts = Opts::new(io::stdin().lock()).unwrap();
 
     log(&format!("CNI command: {}\n", opts.command));
-    log(&format!("stdin: {:?}\n", opts));
+    log(&format!("stdin: {opts:?}\n"));
 
     println!("{}", opts.handle().unwrap());
 }
@@ -101,14 +101,14 @@ mod tests {
         "#
         .as_bytes();
 
-        let opts = Opts::new(&input[..]).unwrap();
+        let opts = Opts::new(input).unwrap();
 
         assert_eq!(opts.command, "ADD");
         assert_eq!(opts.netns, "/var/run/netns/123456789");
         assert_eq!(opts.container_id, "123456789");
         assert_eq!(opts.if_name, "eth0");
-        assert_eq!(opts.config.name, "comet");
-        assert_eq!(opts.config.network, "10.244.0.0/16");
+        // assert_eq!(opts.config.name, "comet");
+        // assert_eq!(opts.config.network, "10.244.0.0/16");
         assert_eq!(opts.config.subnet, "10.244.0.0/24");
     }
 }

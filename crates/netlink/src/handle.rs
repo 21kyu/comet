@@ -9,19 +9,19 @@ use crate::{
 };
 
 pub struct SocketHandle {
-    seq: u32,
-    socket: NetlinkSocket,
+    pub seq: u32,
+    pub socket: NetlinkSocket,
 }
 
 impl SocketHandle {
-    fn new(protocol: i32) -> Result<Self> {
+    pub fn new(protocol: i32) -> Result<Self> {
         Ok(Self {
             seq: 0,
             socket: NetlinkSocket::new(protocol, 0, 0)?,
         })
     }
 
-    fn link_new<T>(&mut self, link: &T, flags: i32) -> Result<()>
+    pub fn link_new<T>(&mut self, link: &T, flags: i32) -> Result<()>
     where
         T: Link + ?Sized,
     {
@@ -126,7 +126,7 @@ impl SocketHandle {
         Ok(())
     }
 
-    fn link_del<T>(&mut self, link: &T) -> Result<()>
+    pub fn link_del<T>(&mut self, link: &T) -> Result<()>
     where
         T: Link + ?Sized,
     {
@@ -144,7 +144,7 @@ impl SocketHandle {
         Ok(())
     }
 
-    fn link_get(&mut self, attr: &LinkAttrs) -> Result<Box<dyn Link>> {
+    pub fn link_get(&mut self, attr: &LinkAttrs) -> Result<Box<dyn Link>> {
         let mut req = NetlinkRequest::new(libc::RTM_GETLINK, libc::NLM_F_ACK);
         let mut msg = Box::new(IfInfoMessage::new(libc::AF_UNSPEC));
 
@@ -154,7 +154,7 @@ impl SocketHandle {
 
         req.add_data(msg);
 
-        if attr.name != "" {
+        if !attr.name.is_empty() {
             let name = Box::new(NetlinkRouteAttr::new(
                 libc::IFLA_IFNAME,
                 attr.name.as_bytes().to_vec(),
@@ -178,8 +178,6 @@ impl SocketHandle {
         };
 
         let buf = req.serialize()?;
-
-        println!("buf: {:?}", buf);
 
         self.socket.send(&buf)?;
 
@@ -278,7 +276,7 @@ mod tests {
         handle.link_del(&*link).unwrap();
 
         let res = handle.link_get(&attr).err();
-        println!("{:?}", res);
+        println!("{res:?}");
         assert!(res.is_some());
     }
 
@@ -318,8 +316,8 @@ mod tests {
             } => {
                 assert_eq!(hello_time.unwrap(), 200);
                 assert_eq!(ageing_time.unwrap(), 30102);
-                assert_eq!(multicast_snooping.unwrap(), true);
-                assert_eq!(vlan_filtering.unwrap(), true);
+                assert!(multicast_snooping.unwrap());
+                assert!(vlan_filtering.unwrap());
             }
             _ => panic!("wrong link type"),
         }

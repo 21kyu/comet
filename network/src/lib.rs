@@ -1,3 +1,3 @@
 pub mod ip;
 pub mod netlink;
-mod socket;
+pub mod socket;

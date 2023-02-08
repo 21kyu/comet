@@ -1,0 +1,47 @@
+name: Main
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      crates: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            crates/netlink: crates/netlink/**
+            network: network/**
+            plugins: plugins/**
+
+  test:
+    needs: changes
+    if: ${{ !contains(needs.changes.outputs.crates, '[]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        crates: ${{ fromJson(needs.changes.outputs.crates) }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - run: cargo fmt --all -- --check
+        working-directory: ${{ matrix.crates}}
+      - run: cargo clippy --all --all-targets --all-features -- -D warnings
+        working-directory: ${{ matrix.crates}}
+      - run: cargo test --all --all-targets --all-features
+        working-directory: ${{ matrix.crates}}
