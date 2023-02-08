@@ -4,6 +4,7 @@ use crate::socket::NetlinkMessageHeader;
 
 pub trait NetlinkRequestData {
     fn len(&self) -> usize;
+    fn is_empty(&self) -> bool;
     fn serialize(&self) -> Result<Vec<u8>>;
 }
 

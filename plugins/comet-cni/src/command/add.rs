@@ -77,7 +77,7 @@ mod tests {
         let cni_if_name = "eth0";
         let container_id = "123456789";
         let subnet = "10.244.0.0/24";
-        let netns = &format!("/var/run/netns/{}", container_id);
+        let netns = &format!("/var/run/netns/{container_id}");
 
         run_command!("ip", "link", "add", "cni0", "type", "bridge");
         run_command!("ip", "link", "set", "cni0", "up");
@@ -86,7 +86,7 @@ mod tests {
 
         let res = add(cni_if_name, container_id, subnet, netns).unwrap();
 
-        println!("{}", res);
+        println!("{res}");
         assert!(!res.is_empty());
 
         let out = run_command!("ip", "link", "del", "veth12345");

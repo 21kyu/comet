@@ -223,6 +223,7 @@ pub fn link_deserialize(buf: &[u8]) -> Result<Box<dyn Link>> {
     }
 
     Ok(match &base.link_type[..] {
+        "device" => Box::new(Kind::Device(base)),
         "dummy" => Box::new(Kind::Dummy(base)),
         "bridge" => Box::new(Kind::Bridge {
             attrs: base,
@@ -241,7 +242,7 @@ pub fn link_deserialize(buf: &[u8]) -> Result<Box<dyn Link>> {
             peer_hw_addr: None,
             peer_ns: None,
         }),
-        "device" | _ => Box::new(Kind::Device(base)),
+        _ => Box::new(Kind::Device(base)),
     })
 }
 
@@ -419,8 +420,8 @@ mod tests {
             } => {
                 assert_eq!(hello_time.unwrap(), 200);
                 assert_eq!(ageing_time.unwrap(), 30000);
-                assert_eq!(multicast_snooping.unwrap(), true);
-                assert_eq!(vlan_filtering.unwrap(), false);
+                assert!(multicast_snooping.unwrap());
+                assert!(!vlan_filtering.unwrap());
             }
             _ => panic!("Expected bridge link"),
         }

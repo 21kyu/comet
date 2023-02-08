@@ -12,7 +12,7 @@ use crate::ipam::{self, allocator::release_ip};
 
 fn create_if_name(prefix: &str, cont_id: &str) -> Result<String> {
     Ok(match cont_id.len() < 5 {
-        true => format!("{}{}", prefix, cont_id),
+        true => format!("{prefix}{cont_id}"),
         false => format!("{}{}", prefix, &cont_id[..5]),
     })
 }
@@ -26,7 +26,7 @@ pub fn setup_veth(
 ) -> Result<(String, String, String)> {
     let veth_if_name = create_if_name("veth", cont_id)?;
     let peer_if_name = create_if_name("peer", cont_id)?;
-    let netns_name = netns_path.split("/").last().unwrap();
+    let netns_name = netns_path.split('/').last().unwrap();
 
     create_veth_pair(&veth_if_name, &peer_if_name)?;
     set_up(&veth_if_name)?;
@@ -37,9 +37,9 @@ pub fn setup_veth(
 
     let netns_file = File::open(netns_path)?;
     let netns_fd = netns_file.as_raw_fd();
-    let subnet_mask_size = subnet.split("/").last().unwrap().to_string();
+    let subnet_mask_size = subnet.split('/').last().unwrap().to_string();
     let if_name = cni_if_name.to_string();
-    let address = format!("{}/{}", cont_ip, subnet_mask_size);
+    let address = format!("{cont_ip}/{subnet_mask_size}");
 
     let handle = thread::spawn(move || -> Result<String> {
         sched::setns(netns_fd, sched::CloneFlags::CLONE_NEWNET)?;
@@ -76,7 +76,7 @@ mod tests {
         let cni_if_name = "eth0";
         let cont_id = "asdf123456789";
         let subnet = "10.244.0.0/24";
-        let netns_path = &format!("/var/run/netns/{}", cont_id);
+        let netns_path = &format!("/var/run/netns/{cont_id}");
 
         run_command!("ip", "link", "add", br_if_name, "type", "bridge");
         run_command!("ip", "link", "set", br_if_name, "up");

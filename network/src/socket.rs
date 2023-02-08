@@ -7,20 +7,20 @@ use netlink_packet_route::{
     NLM_F_REQUEST, RTN_UNICAST, RTPROT_STATIC, RT_SCOPE_UNIVERSE, RT_TABLE_MAIN,
 };
 use netlink_sys::{protocols::NETLINK_ROUTE, SocketAddr};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{Ipv4Addr, Ipv6Addr};
 
-struct Socket {
+pub struct Socket {
     socket: netlink_sys::Socket,
     sequence_number: u32,
     buffer: [u8; 4096],
 }
 
-struct LinkOptions {
+pub struct LinkOptions {
     name: String,
     kind: InfoKind,
 }
 
-enum Route {
+pub enum Route {
     V4 { dest: Ipv4Net, gw: Ipv4Addr },
     V6 { dest: Ipv6Net, gw: Ipv6Addr },
 }

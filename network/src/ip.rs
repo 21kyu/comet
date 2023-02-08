@@ -36,7 +36,7 @@ mod tests {
         let ip = Ipv4Addr::new(10, 244, 0, 1);
         let binary = ip_to_binary(ip);
 
-        assert_eq!(binary, 0b00001010_11110100_00000000_00000001);
+        assert_eq!(binary, 0b0000_1010_1111_0100_0000_0000_0000_0001);
     }
 
     #[test]

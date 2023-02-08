@@ -192,6 +192,10 @@ impl NetlinkRequestData for IfInfoMessage {
         consts::IF_INFO_MSG_SIZE
     }
 
+    fn is_empty(&self) -> bool {
+        self.ifi_family == 0
+    }
+
     fn serialize(&self) -> anyhow::Result<Vec<u8>> {
         bincode::serialize(self).map_err(|e| e.into())
     }
@@ -226,6 +230,10 @@ pub struct RtAttr {
 impl NetlinkRequestData for NetlinkRouteAttr {
     fn len(&self) -> usize {
         self.rt_attr.rta_len as usize
+    }
+
+    fn is_empty(&self) -> bool {
+        self.rt_attr.rta_len == 0
     }
 
     fn serialize(&self) -> anyhow::Result<Vec<u8>> {
