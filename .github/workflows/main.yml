@@ -39,6 +39,7 @@ jobs:
         with:
           toolchain: stable
           override: true
+      - uses: Swatinem/rust-cache@v1
       - run: cargo fmt --all -- --check
         working-directory: ${{ matrix.crates}}
       - run: cargo clippy --all --all-targets --all-features -- -D warnings
