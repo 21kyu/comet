@@ -4,8 +4,8 @@ use anyhow::Result;
 
 use crate::{
     consts,
+    message::{IfInfoMessage, NetlinkRouteAttr},
     request::NetlinkRequestData,
-    socket::{IfInfoMessage, NetlinkRouteAttr},
 };
 
 pub enum Namespace {
