@@ -1,10 +1,12 @@
 use anyhow::{bail, Result};
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
+use netlink_packet_core::{
+    NetlinkMessage, NetlinkPayload, NLM_F_ACK, NLM_F_CREATE, NLM_F_DUMP, NLM_F_EXCL, NLM_F_REQUEST,
+};
 use netlink_packet_route::{
     nlas::link::{Info, InfoKind, Nla},
-    AddressMessage, LinkMessage, NetlinkHeader, NetlinkMessage, NetlinkPayload, RouteMessage,
-    RtnlMessage, AF_INET, AF_INET6, IFF_UP, NLM_F_ACK, NLM_F_CREATE, NLM_F_DUMP, NLM_F_EXCL,
-    NLM_F_REQUEST, RTN_UNICAST, RTPROT_STATIC, RT_SCOPE_UNIVERSE, RT_TABLE_MAIN,
+    AddressMessage, LinkMessage, RouteMessage, RtnlMessage, AF_INET, AF_INET6, IFF_UP, RTN_UNICAST,
+    RTPROT_STATIC, RT_SCOPE_UNIVERSE, RT_TABLE_MAIN,
 };
 use netlink_sys::{protocols::NETLINK_ROUTE, SocketAddr};
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -156,10 +158,7 @@ impl Socket {
     }
 
     fn send(&mut self, msg: RtnlMessage, flags: u16) -> Result<()> {
-        let mut packet = NetlinkMessage {
-            header: NetlinkHeader::default(),
-            payload: NetlinkPayload::from(msg),
-        };
+        let mut packet = NetlinkMessage::from(msg);
         packet.header.flags = NLM_F_REQUEST | flags;
         packet.header.sequence_number = {
             self.sequence_number += 1;
@@ -204,6 +203,7 @@ impl Socket {
                             return Ok(result);
                         }
                     }
+                    _ => todo!(),
                 };
 
                 offset += rx_packet.header.length as usize;
