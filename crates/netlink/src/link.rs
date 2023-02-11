@@ -34,6 +34,7 @@ pub enum Kind {
 pub trait Link {
     fn link_type(&self) -> String;
     fn attrs(&self) -> &LinkAttrs;
+    fn attrs_mut(&mut self) -> &mut LinkAttrs;
     fn kind(&self) -> &Kind;
 }
 
@@ -89,6 +90,15 @@ impl Link for Kind {
     }
 
     fn attrs(&self) -> &LinkAttrs {
+        match self {
+            Kind::Device(attrs) => attrs,
+            Kind::Dummy(attrs) => attrs,
+            Kind::Bridge { attrs, .. } => attrs,
+            Kind::Veth { attrs, .. } => attrs,
+        }
+    }
+
+    fn attrs_mut(&mut self) -> &mut LinkAttrs {
         match self {
             Kind::Device(attrs) => attrs,
             Kind::Dummy(attrs) => attrs,
