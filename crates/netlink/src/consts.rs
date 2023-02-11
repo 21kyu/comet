@@ -20,6 +20,7 @@ pub const IFF_RUNNING: u32 = 0x40;
 
 pub const RT_ATTR_SIZE: usize = 0x4;
 pub const IF_INFO_MSG_SIZE: usize = 0x10;
+pub const IF_ADDR_MSG_SIZE: usize = 0x8;
 
 pub const IFLA_BR_HELLO_TIME: u16 = 0x2;
 pub const IFLA_BR_AGEING_TIME: u16 = 0x4;

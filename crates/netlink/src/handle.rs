@@ -2,9 +2,10 @@ use anyhow::{bail, Result};
 
 use crate::{
     consts,
-    link::{self, Kind, Link, LinkAttrs},
+    link::{self, Kind, Link, LinkAttrs, Namespace},
+    message::{IfInfoMessage, NetlinkRouteAttr},
     request::NetlinkRequest,
-    socket::{IfInfoMessage, NetlinkRouteAttr, NetlinkSocket},
+    socket::NetlinkSocket,
     utils::zero_terminated,
 };
 
@@ -101,12 +102,37 @@ impl SocketHandle {
                 multicast_snooping,
                 vlan_filtering,
             } => {
-                link_info.add_bridge_attrs(
-                    hello_time,
-                    ageing_time,
-                    multicast_snooping,
-                    vlan_filtering,
-                );
+                let mut data = Box::new(NetlinkRouteAttr::new(libc::IFLA_INFO_DATA, vec![]));
+
+                if let Some(hello_time) = hello_time {
+                    data.add_child(
+                        consts::IFLA_BR_HELLO_TIME,
+                        hello_time.to_ne_bytes().to_vec(),
+                    );
+                }
+
+                if let Some(ageing_time) = ageing_time {
+                    data.add_child(
+                        consts::IFLA_BR_AGEING_TIME,
+                        ageing_time.to_ne_bytes().to_vec(),
+                    );
+                }
+
+                if let Some(multicast_snooping) = multicast_snooping {
+                    data.add_child(
+                        consts::IFLA_BR_MCAST_SNOOPING,
+                        (*multicast_snooping as u8).to_ne_bytes().to_vec(),
+                    );
+                }
+
+                if let Some(vlan_filtering) = vlan_filtering {
+                    data.add_child(
+                        consts::IFLA_BR_VLAN_FILTERING,
+                        (*vlan_filtering as u8).to_ne_bytes().to_vec(),
+                    );
+                }
+
+                link_info.add_child_from_attr(data);
             }
             Kind::Veth {
                 attrs: _,
@@ -114,7 +140,53 @@ impl SocketHandle {
                 peer_hw_addr,
                 peer_ns,
             } => {
-                link_info.add_veth_attrs(base, peer_name, peer_hw_addr, peer_ns);
+                let mut data = Box::new(NetlinkRouteAttr::new(libc::IFLA_INFO_DATA, vec![]));
+                let mut peer_info = Box::new(NetlinkRouteAttr::new(consts::VETH_INFO_PEER, vec![]));
+
+                peer_info.add_child_from_attr(Box::new(IfInfoMessage::new(libc::AF_UNSPEC)));
+                peer_info.add_child(libc::IFLA_IFNAME, zero_terminated(peer_name));
+
+                if base.mtu > 0 {
+                    peer_info.add_child(libc::IFLA_MTU, base.mtu.to_ne_bytes().to_vec());
+                }
+
+                if base.tx_queue_len >= 0 {
+                    peer_info
+                        .add_child(libc::IFLA_TXQLEN, base.tx_queue_len.to_ne_bytes().to_vec());
+                }
+
+                if base.num_tx_queues > 0 {
+                    peer_info.add_child(
+                        libc::IFLA_NUM_TX_QUEUES,
+                        base.num_tx_queues.to_ne_bytes().to_vec(),
+                    );
+                }
+
+                if base.num_rx_queues > 0 {
+                    peer_info.add_child(
+                        libc::IFLA_NUM_RX_QUEUES,
+                        base.num_rx_queues.to_ne_bytes().to_vec(),
+                    );
+                }
+
+                if let Some(hw_addr) = peer_hw_addr {
+                    peer_info.add_child(libc::IFLA_ADDRESS, hw_addr.to_vec());
+                }
+
+                match peer_ns {
+                    Some(ns) => match ns {
+                        Namespace::Pid(pid) => {
+                            peer_info.add_child(libc::IFLA_NET_NS_PID, pid.to_ne_bytes().to_vec());
+                        }
+                        Namespace::Fd(fd) => {
+                            peer_info.add_child(libc::IFLA_NET_NS_FD, fd.to_ne_bytes().to_vec());
+                        }
+                    },
+                    None => {}
+                }
+
+                data.add_child_from_attr(peer_info);
+                link_info.add_child_from_attr(data);
             }
             _ => {}
         }
