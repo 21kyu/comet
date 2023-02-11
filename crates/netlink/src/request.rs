@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::socket::NetlinkMessageHeader;
+use crate::message::NetlinkMessageHeader;
 
 pub trait NetlinkRequestData {
     fn len(&self) -> usize;
@@ -63,7 +63,7 @@ impl NetlinkRequest {
 
 #[cfg(test)]
 mod tests {
-    use crate::socket::{IfInfoMessage, NetlinkRouteAttr};
+    use crate::{message::IfInfoMessage, message::NetlinkRouteAttr};
 
     use super::*;
 
