@@ -33,7 +33,7 @@ fn bench_netlink_request_serialize(b: &mut Bencher) {
 
     let mtu = Box::new(NetlinkRouteAttr::new(
         libc::IFLA_MTU,
-        (1500 as u32).to_ne_bytes().to_vec(),
+        1500_u32.to_ne_bytes().to_vec(),
     ));
 
     let mut link_info = Box::new(NetlinkRouteAttr::new(libc::IFLA_LINKINFO, vec![]));
