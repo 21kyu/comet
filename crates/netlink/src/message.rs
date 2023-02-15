@@ -203,7 +203,7 @@ impl IfInfoMessage {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default, Serialize)]
+#[derive(Clone, Copy, Default, Debug, Serialize)]
 pub struct IfAddrMessage {
     pub ifa_family: u8,
     pub ifa_prefix_len: u8,

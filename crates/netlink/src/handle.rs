@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 use ipnet::IpNet;
 
 use crate::{
-    addr::Address,
+    addr::{self, Address},
     consts,
     link::{self, Kind, Link, LinkAttrs, Namespace},
     message::{IfAddrMessage, IfInfoMessage, NetlinkRouteAttr},
@@ -197,7 +197,7 @@ impl SocketHandle {
 
         req.add_data(link_info);
 
-        let _ = self.execute(&mut req, 0)?;
+        let _ = self.execute(&mut req, false)?;
 
         Ok(())
     }
@@ -215,7 +215,7 @@ impl SocketHandle {
 
         req.add_data(msg);
 
-        let _ = self.execute(&mut req, 0)?;
+        let _ = self.execute(&mut req, false)?;
 
         Ok(())
     }
@@ -238,7 +238,7 @@ impl SocketHandle {
             req.add_data(name);
         }
 
-        let msgs = self.execute(&mut req, 0)?;
+        let msgs = self.execute(&mut req, false)?;
 
         match msgs.len() {
             0 => bail!("no link found"),
@@ -247,15 +247,11 @@ impl SocketHandle {
         }
     }
 
-    pub fn addr_handle<T>(
-        &mut self,
-        link: &T,
-        addr: &Address,
-        mut req: NetlinkRequest,
-    ) -> Result<()>
+    pub fn addr_handle<T>(&mut self, link: &T, addr: &Address, proto: u16, flags: i32) -> Result<()>
     where
         T: Link + ?Sized,
     {
+        let mut req = NetlinkRequest::new(proto, flags);
         let base = link.attrs();
         let mut index: i32 = base.index;
 
@@ -333,12 +329,33 @@ impl SocketHandle {
             // TODO: add support for IFA_CACHEINFO
         }
 
-        let _ = self.execute(&mut req, 0)?;
+        let _ = self.execute(&mut req, false)?;
 
         Ok(())
     }
 
-    fn execute(&mut self, req: &mut NetlinkRequest, _res_type: i32) -> Result<Vec<Vec<u8>>> {
+    pub fn addr_show<T>(&mut self, link: &T, family: i32) -> Result<Vec<Address>>
+    where
+        T: Link + ?Sized,
+    {
+        let mut req = NetlinkRequest::new(libc::RTM_GETADDR, libc::NLM_F_DUMP);
+        let msg = Box::new(IfAddrMessage::new(family));
+        req.add_data(msg);
+
+        let msgs = self.execute(&mut req, true)?;
+        let mut res = vec![];
+
+        for m in msgs {
+            let addr = addr::addr_deserialize(&m)?;
+            if addr.index == link.attrs().index {
+                res.push(addr);
+            }
+        }
+
+        Ok(res)
+    }
+
+    fn execute(&mut self, req: &mut NetlinkRequest, multi: bool) -> Result<Vec<Vec<u8>>> {
         req.header.nlmsg_seq = {
             self.seq += 1;
             self.seq
@@ -390,6 +407,10 @@ impl SocketHandle {
                         res.push(m.data);
                     }
                 }
+
+                if multi {
+                    continue;
+                }
             }
         }
 
@@ -402,7 +423,6 @@ mod tests {
     use crate::{
         addr,
         link::{self, Kind, LinkAttrs},
-        request::NetlinkRequest,
     };
 
     macro_rules! test_setup {
@@ -412,13 +432,6 @@ mod tests {
                 return;
             }
             nix::sched::unshare(nix::sched::CloneFlags::CLONE_NEWNET).unwrap();
-        };
-    }
-
-    macro_rules! run_command {
-        ($command:expr $(, $args:expr)*) => {
-            std::process::Command::new($command).args([$($args),*]).output()
-                .expect("failed to run command")
         };
     }
 
@@ -589,16 +602,14 @@ mod tests {
             ..Default::default()
         };
 
-        let req = NetlinkRequest::new(
-            libc::RTM_NEWADDR,
-            libc::NLM_F_CREATE | libc::NLM_F_EXCL | libc::NLM_F_ACK,
-        );
+        let proto = libc::RTM_NEWADDR;
+        let flags = libc::NLM_F_CREATE | libc::NLM_F_EXCL | libc::NLM_F_ACK;
 
-        handle.addr_handle(&*link, &addr, req).unwrap();
+        handle.addr_handle(&*link, &addr, proto, flags).unwrap();
 
-        let _ = handle.link_get(&attr).unwrap();
+        let addrs = handle.addr_show(&*link, libc::AF_UNSPEC).unwrap();
 
-        let out = run_command!("ip", "addr", "show");
-        println!("{:?}", out);
+        assert_eq!(addrs.len(), 1);
+        assert_eq!(addrs[0].ip, address);
     }
 }
