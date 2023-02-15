@@ -1,9 +1,11 @@
 #![macro_use]
 extern crate bencher;
 
+use std::net::{Ipv4Addr, Ipv6Addr};
+
 use bencher::{benchmark_group, benchmark_main, Bencher};
 use netlink::{
-    consts,
+    addr, consts,
     link::link_deserialize,
     message::{IfInfoMessage, NetlinkRouteAttr},
     request::{NetlinkRequest, NetlinkRequestData},
@@ -175,10 +177,21 @@ fn bench_link_deserialize(b: &mut Bencher) {
     })
 }
 
+fn bench_vec_to_addr(b: &mut Bencher) {
+    b.iter(|| {
+        let addr_v4 = Ipv4Addr::LOCALHOST.octets().to_vec();
+        let _ = addr::vec_to_addr(addr_v4).unwrap();
+
+        let addr_v6 = Ipv6Addr::LOCALHOST.octets().to_vec();
+        let _ = addr::vec_to_addr(addr_v6).unwrap();
+    })
+}
+
 benchmark_group!(
     benches,
     bench_netlink_route_attr_serialize,
     bench_netlink_request_serialize,
-    bench_link_deserialize
+    bench_link_deserialize,
+    bench_vec_to_addr
 );
 benchmark_main!(benches);
