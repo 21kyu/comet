@@ -209,7 +209,7 @@ pub struct IfAddrMessage {
     pub ifa_prefix_len: u8,
     pub ifa_flags: u8,
     pub ifa_scope: u8,
-    pub ifa_index: u32,
+    pub ifa_index: i32,
 }
 
 impl NetlinkRequestData for IfAddrMessage {

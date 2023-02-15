@@ -1,9 +1,13 @@
+use std::net::IpAddr;
+
 use anyhow::{bail, Result};
+use ipnet::IpNet;
 
 use crate::{
+    addr::Address,
     consts,
     link::{self, Kind, Link, LinkAttrs, Namespace},
-    message::{IfInfoMessage, NetlinkRouteAttr},
+    message::{IfAddrMessage, IfInfoMessage, NetlinkRouteAttr},
     request::NetlinkRequest,
     socket::NetlinkSocket,
     utils::zero_terminated,
@@ -243,6 +247,97 @@ impl SocketHandle {
         }
     }
 
+    pub fn addr_handle<T>(
+        &mut self,
+        link: &T,
+        addr: &Address,
+        mut req: NetlinkRequest,
+    ) -> Result<()>
+    where
+        T: Link + ?Sized,
+    {
+        let base = link.attrs();
+        let mut index: i32 = base.index;
+
+        if index == 0 {
+            index = match self.link_get(base) {
+                Ok(link) => link.attrs().index,
+                Err(_) => 0,
+            }
+        }
+
+        let (family, local_addr_data) = match addr.ip {
+            IpNet::V4(ip) => (libc::AF_INET, ip.addr().octets().to_vec()),
+            IpNet::V6(ip) => (libc::AF_INET6, ip.addr().octets().to_vec()),
+        };
+
+        let peer_addr_data = match addr.peer {
+            Some(IpNet::V4(ip)) if family == libc::AF_INET6 => {
+                ip.addr().to_ipv6_mapped().octets().to_vec()
+            }
+            Some(IpNet::V6(ip)) if family == libc::AF_INET => {
+                // TODO: avoid to use unwrap
+                ip.addr().to_ipv4().unwrap().octets().to_vec()
+            }
+            Some(IpNet::V4(ip)) => ip.addr().octets().to_vec(),
+            Some(IpNet::V6(ip)) => ip.addr().octets().to_vec(),
+            None => local_addr_data.clone(),
+        };
+
+        let mut msg = Box::new(IfAddrMessage {
+            ifa_family: family as u8,
+            ifa_prefix_len: addr.ip.prefix_len(),
+            ifa_flags: 0,
+            ifa_scope: addr.scope as u8,
+            ifa_index: index,
+        });
+
+        let local_data = Box::new(NetlinkRouteAttr::new(libc::IFA_LOCAL, local_addr_data));
+        let address_data = Box::new(NetlinkRouteAttr::new(libc::IFA_ADDRESS, peer_addr_data));
+
+        if addr.flags <= u8::MAX.into() {
+            msg.ifa_flags = addr.flags as u8;
+        } else if addr.flags != 0 {
+            let flags = Box::new(NetlinkRouteAttr::new(
+                libc::IFA_FLAGS,
+                addr.flags.to_ne_bytes().to_vec(),
+            ));
+            req.add_data(flags);
+        }
+
+        req.add_data(msg);
+        req.add_data(local_data);
+        req.add_data(address_data);
+
+        if family == libc::AF_INET {
+            let broadcast = match addr.broadcast {
+                Some(IpAddr::V4(br)) => br.octets().to_vec(),
+                Some(IpAddr::V6(br)) => br.octets().to_vec(),
+                None => match addr.ip.broadcast() {
+                    IpAddr::V4(br) => br.octets().to_vec(),
+                    IpAddr::V6(br) => br.octets().to_vec(),
+                },
+            };
+
+            let broadcast_data = Box::new(NetlinkRouteAttr::new(libc::IFA_BROADCAST, broadcast));
+            req.add_data(broadcast_data);
+
+            if !addr.label.is_empty() {
+                let label_data = Box::new(NetlinkRouteAttr::new(
+                    libc::IFA_LABEL,
+                    zero_terminated(&addr.label),
+                ));
+                req.add_data(label_data);
+            }
+
+            // TODO: add support for IFA_CACHEINFO
+        }
+
+        let _ = self.execute(&mut req, 0)?;
+
+        Ok(())
+    }
+
     fn execute(&mut self, req: &mut NetlinkRequest, _res_type: i32) -> Result<Vec<Vec<u8>>> {
         req.header.nlmsg_seq = {
             self.seq += 1;
@@ -304,7 +399,11 @@ impl SocketHandle {
 
 #[cfg(test)]
 mod tests {
-    use crate::link::{self, Kind, LinkAttrs};
+    use crate::{
+        addr,
+        link::{self, Kind, LinkAttrs},
+        request::NetlinkRequest,
+    };
 
     macro_rules! test_setup {
         () => {
@@ -313,6 +412,13 @@ mod tests {
                 return;
             }
             nix::sched::unshare(nix::sched::CloneFlags::CLONE_NEWNET).unwrap();
+        };
+    }
+
+    macro_rules! run_command {
+        ($command:expr $(, $args:expr)*) => {
+            std::process::Command::new($command).args([$($args),*]).output()
+                .expect("failed to run command")
         };
     }
 
@@ -466,5 +572,33 @@ mod tests {
 
         assert_eq!(link.attrs().index, 1);
         assert_eq!(link.attrs().name, "lo");
+    }
+
+    #[test]
+    fn test_addr_handle() {
+        test_setup!();
+        let mut handle = super::SocketHandle::new(libc::NETLINK_ROUTE).unwrap();
+        let mut attr = link::LinkAttrs::new();
+        attr.name = "lo".to_string();
+
+        let link = handle.link_get(&attr).unwrap();
+
+        let address = "127.0.0.2/24".parse().unwrap();
+        let addr = addr::Address {
+            ip: address,
+            ..Default::default()
+        };
+
+        let req = NetlinkRequest::new(
+            libc::RTM_NEWADDR,
+            libc::NLM_F_CREATE | libc::NLM_F_EXCL | libc::NLM_F_ACK,
+        );
+
+        handle.addr_handle(&*link, &addr, req).unwrap();
+
+        let _ = handle.link_get(&attr).unwrap();
+
+        let out = run_command!("ip", "addr", "show");
+        println!("{:?}", out);
     }
 }
