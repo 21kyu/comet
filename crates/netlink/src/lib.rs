@@ -1,3 +1,4 @@
+pub mod addr;
 pub mod consts;
 pub mod handle;
 pub mod link;

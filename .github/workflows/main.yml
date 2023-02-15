@@ -44,5 +44,5 @@ jobs:
         working-directory: ${{ matrix.crates}}
       - run: cargo clippy --all --all-targets --all-features -- -D warnings
         working-directory: ${{ matrix.crates}}
-      - run: cargo test --all --all-targets --all-features
+      - run: cargo test --all --lib --bins --tests --examples --all-features
         working-directory: ${{ matrix.crates}}
