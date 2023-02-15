@@ -55,7 +55,6 @@ pub fn addr_deserialize(buf: &[u8]) -> Result<Address> {
     Ok(addr)
 }
 
-
 pub fn vec_to_addr(vec: Vec<u8>) -> Result<IpAddr> {
     // TODO: use IpAddr::parse_ascii when to be stable
     match vec.len() {
