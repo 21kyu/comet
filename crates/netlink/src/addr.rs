@@ -34,7 +34,6 @@ pub fn addr_deserialize(buf: &[u8]) -> Result<Address> {
     for attr in rt_attrs {
         match attr.rt_attr.rta_type {
             libc::IFA_ADDRESS => {
-                println!("address: {:?}", attr.value);
                 addr.ip = IpNet::new(vec_to_addr(attr.value)?, if_addr_msg.ifa_prefix_len)?;
             }
             libc::IFA_LOCAL => {
@@ -55,6 +54,7 @@ pub fn addr_deserialize(buf: &[u8]) -> Result<Address> {
 
     Ok(addr)
 }
+
 
 pub fn vec_to_addr(vec: Vec<u8>) -> Result<IpAddr> {
     // TODO: use IpAddr::parse_ascii when to be stable
