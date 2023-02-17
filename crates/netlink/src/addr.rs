@@ -8,6 +8,13 @@ use crate::{
     request::NetlinkRequestData,
 };
 
+pub enum AddrCmd {
+    Add,
+    Change,
+    Replace,
+    Del,
+}
+
 #[derive(Default, Debug)]
 pub struct Address {
     pub index: i32,
