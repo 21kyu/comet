@@ -111,7 +111,7 @@ impl SockAddrNetlink {
 
 #[cfg(test)]
 mod tests {
-    use crate::message::IfInfoMessage;
+    use crate::message::InfoMessage;
 
     use super::*;
 
@@ -142,16 +142,16 @@ mod tests {
 
     #[test]
     fn test_if_info_message() {
-        let msg = IfInfoMessage::deserialize(&NETLINK_MSG).unwrap();
+        let msg = InfoMessage::deserialize(&NETLINK_MSG).unwrap();
 
-        assert_eq!(msg.ifi_family, 0);
+        assert_eq!(msg.family, 0);
         assert_eq!(msg.ifi_type, 772);
-        assert_eq!(msg.ifi_index, 1);
+        assert_eq!(msg.index, 1);
         assert_eq!(
-            msg.ifi_flags,
+            msg.flags,
             consts::IFF_UP | consts::IFF_LOOPBACK | consts::IFF_RUNNING
         );
-        assert_eq!(msg.ifi_change, 0);
+        assert_eq!(msg.change, 0);
     }
 
     #[test]
@@ -200,7 +200,7 @@ mod tests {
         }
 
         res.iter().for_each(|r| {
-            let _ = IfInfoMessage::deserialize(r).unwrap();
+            let _ = InfoMessage::deserialize(r).unwrap();
         });
     }
 }

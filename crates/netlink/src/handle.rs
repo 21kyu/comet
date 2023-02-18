@@ -7,8 +7,9 @@ use crate::{
     addr::{self, Address},
     consts,
     link::{self, Kind, Link, LinkAttrs, Namespace},
-    message::{IfAddrMessage, IfInfoMessage, NetlinkRouteAttr},
+    message::{AddressMessage, InfoMessage, NetlinkRouteAttr, RouteMessage},
     request::NetlinkRequest,
+    route::Route,
     socket::NetlinkSocket,
     utils::zero_terminated,
 };
@@ -32,16 +33,16 @@ impl SocketHandle {
     {
         let base = link.attrs();
         let mut req = NetlinkRequest::new(libc::RTM_NEWLINK, flags);
-        let mut msg = Box::new(IfInfoMessage::new(libc::AF_UNSPEC));
+        let mut msg = Box::new(InfoMessage::new(libc::AF_UNSPEC));
 
         if base.index != 0 {
-            msg.ifi_index = base.index;
+            msg.index = base.index;
         }
 
         // TODO: add more flags
         if base.flags & consts::IFF_UP != 0 {
-            msg.ifi_flags = consts::IFF_UP;
-            msg.ifi_change = consts::IFF_UP;
+            msg.flags = consts::IFF_UP;
+            msg.change = consts::IFF_UP;
         }
 
         req.add_data(msg);
@@ -147,7 +148,7 @@ impl SocketHandle {
                 let mut data = Box::new(NetlinkRouteAttr::new(libc::IFLA_INFO_DATA, vec![]));
                 let mut peer_info = Box::new(NetlinkRouteAttr::new(consts::VETH_INFO_PEER, vec![]));
 
-                peer_info.add_child_from_attr(Box::new(IfInfoMessage::new(libc::AF_UNSPEC)));
+                peer_info.add_child_from_attr(Box::new(InfoMessage::new(libc::AF_UNSPEC)));
                 peer_info.add_child(libc::IFLA_IFNAME, zero_terminated(peer_name));
 
                 if base.mtu > 0 {
@@ -210,8 +211,8 @@ impl SocketHandle {
 
         let mut req = NetlinkRequest::new(libc::RTM_DELLINK, libc::NLM_F_ACK);
 
-        let mut msg = Box::new(IfInfoMessage::new(libc::AF_UNSPEC));
-        msg.ifi_index = base.index;
+        let mut msg = Box::new(InfoMessage::new(libc::AF_UNSPEC));
+        msg.index = base.index;
 
         req.add_data(msg);
 
@@ -222,10 +223,10 @@ impl SocketHandle {
 
     pub fn link_get(&mut self, attr: &LinkAttrs) -> Result<Box<dyn Link>> {
         let mut req = NetlinkRequest::new(libc::RTM_GETLINK, libc::NLM_F_ACK);
-        let mut msg = Box::new(IfInfoMessage::new(libc::AF_UNSPEC));
+        let mut msg = Box::new(InfoMessage::new(libc::AF_UNSPEC));
 
         if attr.index != 0 {
-            msg.ifi_index = attr.index;
+            msg.index = attr.index;
         }
 
         req.add_data(msg);
@@ -245,6 +246,25 @@ impl SocketHandle {
             1 => link::link_deserialize(&msgs[0]),
             _ => bail!("multiple links found"),
         }
+    }
+
+    pub fn link_setup<T>(&mut self, link: &T) -> Result<()>
+    where
+        T: Link + ?Sized,
+    {
+        let mut req = NetlinkRequest::new(libc::RTM_NEWLINK, libc::NLM_F_ACK);
+        let base = link.attrs();
+
+        let mut msg = Box::new(InfoMessage::new(libc::AF_UNSPEC));
+        msg.index = base.index;
+        msg.flags = libc::IFF_UP as u32;
+        msg.change = libc::IFF_UP as u32;
+
+        req.add_data(msg);
+
+        let _ = self.execute(&mut req, false)?;
+
+        Ok(())
     }
 
     pub fn addr_handle<T>(&mut self, link: &T, addr: &Address, proto: u16, flags: i32) -> Result<()>
@@ -280,26 +300,16 @@ impl SocketHandle {
             None => local_addr_data.clone(),
         };
 
-        let mut msg = Box::new(IfAddrMessage {
-            ifa_family: family as u8,
-            ifa_prefix_len: addr.ip.prefix_len(),
-            ifa_flags: 0,
-            ifa_scope: addr.scope as u8,
-            ifa_index: index,
+        let msg = Box::new(AddressMessage {
+            family: family as u8,
+            prefix_len: addr.ip.prefix_len(),
+            flags: addr.flags,
+            scope: addr.scope,
+            index,
         });
 
         let local_data = Box::new(NetlinkRouteAttr::new(libc::IFA_LOCAL, local_addr_data));
         let address_data = Box::new(NetlinkRouteAttr::new(libc::IFA_ADDRESS, peer_addr_data));
-
-        if addr.flags <= u8::MAX.into() {
-            msg.ifa_flags = addr.flags as u8;
-        } else if addr.flags != 0 {
-            let flags = Box::new(NetlinkRouteAttr::new(
-                libc::IFA_FLAGS,
-                addr.flags.to_ne_bytes().to_vec(),
-            ));
-            req.add_data(flags);
-        }
 
         req.add_data(msg);
         req.add_data(local_data);
@@ -339,7 +349,7 @@ impl SocketHandle {
         T: Link + ?Sized,
     {
         let mut req = NetlinkRequest::new(libc::RTM_GETADDR, libc::NLM_F_DUMP);
-        let msg = Box::new(IfAddrMessage::new(family));
+        let msg = Box::new(AddressMessage::new(family));
         req.add_data(msg);
 
         let msgs = self.execute(&mut req, true)?;
@@ -353,6 +363,79 @@ impl SocketHandle {
         }
 
         Ok(res)
+    }
+
+    pub fn route_handle(&mut self, route: &Route, proto: u16, flags: i32) -> Result<()> {
+        let mut req = NetlinkRequest::new(proto, flags);
+
+        let mut msg = match proto {
+            libc::RTM_DELROUTE => Box::new(RouteMessage::new_rt_del_msg()),
+            _ => Box::new(RouteMessage::new_rt_msg()),
+        };
+
+        let mut attrs = vec![];
+
+        if proto != libc::RTM_GETROUTE || route.index > 0 {
+            let mut b = [0; 4];
+            b.copy_from_slice(&route.index.to_ne_bytes());
+            attrs.push(Box::new(NetlinkRouteAttr::new(libc::RTA_OIF, b.to_vec())));
+        }
+
+        if let Some(dst) = route.dst {
+            let (family, dst_data) = match dst {
+                IpNet::V4(ip) => (libc::AF_INET, ip.addr().octets().to_vec()),
+                IpNet::V6(ip) => (libc::AF_INET6, ip.addr().octets().to_vec()),
+            };
+            msg.family = family as u8;
+            msg.dst_len = dst.prefix_len();
+
+            attrs.push(Box::new(NetlinkRouteAttr::new(libc::RTA_DST, dst_data)));
+        }
+
+        if let Some(src) = route.src {
+            let (family, src_data) = match src {
+                IpAddr::V4(ip) => (libc::AF_INET, ip.octets().to_vec()),
+                IpAddr::V6(ip) => (libc::AF_INET6, ip.octets().to_vec()),
+            };
+
+            if msg.family == 0 {
+                msg.family = family as u8;
+            } else if msg.family != family as u8 {
+                bail!("src and dst address family mismatch");
+            }
+
+            attrs.push(Box::new(NetlinkRouteAttr::new(libc::RTA_PREFSRC, src_data)));
+        }
+
+        if let Some(gw) = route.gw {
+            let (family, gw_data) = match gw {
+                IpAddr::V4(ip) => (libc::AF_INET, ip.octets().to_vec()),
+                IpAddr::V6(ip) => (libc::AF_INET6, ip.octets().to_vec()),
+            };
+
+            if msg.family == 0 {
+                msg.family = family as u8;
+            } else if msg.family != family as u8 {
+                bail!("gw, src and dst address family mismatch");
+            }
+
+            attrs.push(Box::new(NetlinkRouteAttr::new(libc::RTA_GATEWAY, gw_data)));
+        }
+
+        // TODO: more attributes to be added
+
+        msg.flags = route.flags;
+        msg.scope = route.scope;
+
+        req.add_data(msg);
+
+        for attr in attrs {
+            req.add_data(attr);
+        }
+
+        let _ = self.execute(&mut req, false)?;
+
+        Ok(())
     }
 
     fn execute(&mut self, req: &mut NetlinkRequest, multi: bool) -> Result<Vec<Vec<u8>>> {
@@ -423,6 +506,7 @@ mod tests {
     use crate::{
         addr,
         link::{self, Kind, LinkAttrs},
+        route::Route,
     };
 
     macro_rules! test_setup {
@@ -611,5 +695,34 @@ mod tests {
 
         assert_eq!(addrs.len(), 1);
         assert_eq!(addrs[0].ip, address);
+    }
+
+    #[test]
+    fn test_route_handle() {
+        test_setup!();
+        let mut handle = super::SocketHandle::new(libc::NETLINK_ROUTE).unwrap();
+        let mut attr = link::LinkAttrs::new();
+        attr.name = "lo".to_string();
+
+        let link = handle.link_get(&attr).unwrap();
+
+        handle.link_setup(&*link).unwrap();
+
+        let route = Route {
+            index: link.attrs().index,
+            dst: Some("192.168.0.0/24".parse().unwrap()),
+            src: Some("127.0.0.2".parse().unwrap()),
+            ..Default::default()
+        };
+
+        handle
+            .route_handle(
+                &route,
+                libc::RTM_NEWROUTE,
+                libc::NLM_F_CREATE | libc::NLM_F_EXCL | libc::NLM_F_ACK,
+            )
+            .unwrap();
+
+        // TODO
     }
 }

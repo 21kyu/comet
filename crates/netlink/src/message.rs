@@ -166,22 +166,22 @@ pub struct RtAttr {
 
 #[repr(C)]
 #[derive(Clone, Copy, Default, Debug, Serialize)]
-pub struct IfInfoMessage {
-    pub ifi_family: u8,
-    pub _ifi_pad: u8,
+pub struct InfoMessage {
+    pub family: u8,
+    pub _pad: u8,
     pub ifi_type: u16,
-    pub ifi_index: i32,
-    pub ifi_flags: u32,
-    pub ifi_change: u32,
+    pub index: i32,
+    pub flags: u32,
+    pub change: u32,
 }
 
-impl NetlinkRequestData for IfInfoMessage {
+impl NetlinkRequestData for InfoMessage {
     fn len(&self) -> usize {
         consts::IF_INFO_MSG_SIZE
     }
 
     fn is_empty(&self) -> bool {
-        self.ifi_family == 0
+        self.family == 0
     }
 
     fn serialize(&self) -> Result<Vec<u8>> {
@@ -189,10 +189,10 @@ impl NetlinkRequestData for IfInfoMessage {
     }
 }
 
-impl IfInfoMessage {
+impl InfoMessage {
     pub fn new(family: i32) -> Self {
         Self {
-            ifi_family: family as u8,
+            family: family as u8,
             ..Default::default()
         }
     }
@@ -204,21 +204,21 @@ impl IfInfoMessage {
 
 #[repr(C)]
 #[derive(Clone, Copy, Default, Debug, Serialize)]
-pub struct IfAddrMessage {
-    pub ifa_family: u8,
-    pub ifa_prefix_len: u8,
-    pub ifa_flags: u8,
-    pub ifa_scope: u8,
-    pub ifa_index: i32,
+pub struct AddressMessage {
+    pub family: u8,
+    pub prefix_len: u8,
+    pub flags: u8,
+    pub scope: u8,
+    pub index: i32,
 }
 
-impl NetlinkRequestData for IfAddrMessage {
+impl NetlinkRequestData for AddressMessage {
     fn len(&self) -> usize {
         consts::IF_ADDR_MSG_SIZE
     }
 
     fn is_empty(&self) -> bool {
-        self.ifa_family == 0
+        self.family == 0
     }
 
     fn serialize(&self) -> Result<Vec<u8>> {
@@ -226,15 +226,67 @@ impl NetlinkRequestData for IfAddrMessage {
     }
 }
 
-impl IfAddrMessage {
+impl AddressMessage {
     pub fn new(family: i32) -> Self {
         Self {
-            ifa_family: family as u8,
+            family: family as u8,
             ..Default::default()
         }
     }
 
     pub fn deserialize(buf: &[u8]) -> Result<Self> {
         Ok(unsafe { *(buf[..consts::IF_ADDR_MSG_SIZE].as_ptr() as *const Self) })
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug, Serialize)]
+pub struct RouteMessage {
+    pub family: u8,
+    pub dst_len: u8,
+    pub src_len: u8,
+    pub tos: u8,
+    pub table: u8,
+    pub protocol: u8,
+    pub scope: u8,
+    pub rtm_type: u8,
+    pub flags: u32,
+}
+
+impl NetlinkRequestData for RouteMessage {
+    fn len(&self) -> usize {
+        consts::ROUTE_MSG_SIZE
+    }
+
+    fn is_empty(&self) -> bool {
+        self.family == 0
+    }
+
+    fn serialize(&self) -> Result<Vec<u8>> {
+        bincode::serialize(self).map_err(|e| e.into())
+    }
+}
+
+impl RouteMessage {
+    pub fn new_rt_msg() -> Self {
+        Self {
+            table: libc::RT_TABLE_MAIN,
+            protocol: libc::RTPROT_BOOT,
+            scope: libc::RT_SCOPE_UNIVERSE,
+            rtm_type: libc::RTN_UNICAST,
+            ..Default::default()
+        }
+    }
+
+    pub fn new_rt_del_msg() -> Self {
+        Self {
+            table: libc::RT_TABLE_MAIN,
+            scope: libc::RT_SCOPE_NOWHERE,
+            ..Default::default()
+        }
+    }
+
+    pub fn deserialize(buf: &[u8]) -> Result<Self> {
+        Ok(unsafe { *(buf[..consts::ROUTE_MSG_SIZE].as_ptr() as *const Self) })
     }
 }
