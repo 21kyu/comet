@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::{
     consts,
-    message::{IfInfoMessage, NetlinkRouteAttr},
+    message::{InfoMessage, NetlinkRouteAttr},
     request::NetlinkRequestData,
 };
 
@@ -71,10 +71,10 @@ impl LinkAttrs {
         Self::default()
     }
 
-    fn from(if_info_msg: IfInfoMessage) -> Self {
+    fn from(if_info_msg: InfoMessage) -> Self {
         let mut attrs = Self::new();
-        attrs.index = if_info_msg.ifi_index;
-        attrs.raw_flags = if_info_msg.ifi_flags;
+        attrs.index = if_info_msg.index;
+        attrs.raw_flags = if_info_msg.flags;
         attrs
     }
 }
@@ -154,7 +154,7 @@ impl LinkXdp {
 }
 
 pub fn link_deserialize(buf: &[u8]) -> Result<Box<dyn Link>> {
-    let if_info_msg = IfInfoMessage::deserialize(buf)?;
+    let if_info_msg = InfoMessage::deserialize(buf)?;
     let rt_attrs = NetlinkRouteAttr::from(&buf[if_info_msg.len()..])?;
 
     let mut base = LinkAttrs::from(if_info_msg);

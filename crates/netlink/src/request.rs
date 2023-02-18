@@ -63,7 +63,7 @@ impl NetlinkRequest {
 
 #[cfg(test)]
 mod tests {
-    use crate::{message::IfInfoMessage, message::NetlinkRouteAttr};
+    use crate::{message::InfoMessage, message::NetlinkRouteAttr};
 
     use super::*;
 
@@ -95,7 +95,7 @@ mod tests {
     #[test]
     fn test_netlink_request() {
         let mut req = NetlinkRequest::new(0, 0);
-        let msg = IfInfoMessage::deserialize(&NETLINK_MSG).unwrap();
+        let msg = InfoMessage::deserialize(&NETLINK_MSG).unwrap();
         req.add_data(Box::new(msg));
 
         let name = NetlinkRouteAttr::new(libc::IFLA_IFNAME, "lo".as_bytes().to_vec());

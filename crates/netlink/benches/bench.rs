@@ -7,7 +7,7 @@ use bencher::{benchmark_group, benchmark_main, Bencher};
 use netlink::{
     addr, consts,
     link::link_deserialize,
-    message::{IfInfoMessage, NetlinkRouteAttr},
+    message::{InfoMessage, NetlinkRouteAttr},
     request::{NetlinkRequest, NetlinkRequestData},
 };
 
@@ -20,11 +20,11 @@ fn bench_netlink_route_attr_serialize(b: &mut Bencher) {
 
 fn bench_netlink_request_serialize(b: &mut Bencher) {
     let mut req = NetlinkRequest::new(libc::RTM_GETLINK, libc::NLM_F_ACK);
-    let msg = Box::new(IfInfoMessage {
-        ifi_family: libc::AF_UNSPEC as u8,
-        ifi_index: 1,
-        ifi_flags: consts::IFF_UP,
-        ifi_change: consts::IFF_UP,
+    let msg = Box::new(InfoMessage {
+        family: libc::AF_UNSPEC as u8,
+        index: 1,
+        flags: consts::IFF_UP,
+        change: consts::IFF_UP,
         ..Default::default()
     });
 

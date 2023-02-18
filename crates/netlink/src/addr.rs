@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 use ipnet::IpNet;
 
 use crate::{
-    message::{IfAddrMessage, NetlinkRouteAttr},
+    message::{AddressMessage, NetlinkRouteAttr},
     request::NetlinkRequestData,
 };
 
@@ -20,8 +20,8 @@ pub struct Address {
     pub index: i32,
     pub ip: IpNet,
     pub label: String,
-    pub flags: i32,
-    pub scope: i32,
+    pub flags: u8,
+    pub scope: u8,
     pub broadcast: Option<IpAddr>,
     pub peer: Option<IpNet>,
     pub preferred_lifetime: i32,
@@ -29,19 +29,19 @@ pub struct Address {
 }
 
 pub fn addr_deserialize(buf: &[u8]) -> Result<Address> {
-    let if_addr_msg = IfAddrMessage::deserialize(buf)?;
+    let if_addr_msg = AddressMessage::deserialize(buf)?;
     let rt_attrs = NetlinkRouteAttr::from(&buf[if_addr_msg.len()..])?;
 
     let mut addr = Address {
-        index: if_addr_msg.ifa_index,
-        scope: if_addr_msg.ifa_scope as i32,
+        index: if_addr_msg.index,
+        scope: if_addr_msg.scope,
         ..Default::default()
     };
 
     for attr in rt_attrs {
         match attr.rt_attr.rta_type {
             libc::IFA_ADDRESS => {
-                addr.ip = IpNet::new(vec_to_addr(attr.value)?, if_addr_msg.ifa_prefix_len)?;
+                addr.ip = IpNet::new(vec_to_addr(attr.value)?, if_addr_msg.prefix_len)?;
             }
             libc::IFA_LOCAL => {
                 // TODO
