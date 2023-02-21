@@ -9,7 +9,7 @@ use crate::{
     link::{self, Kind, Link, LinkAttrs, Namespace},
     message::{AddressMessage, InfoMessage, NetlinkRouteAttr, RouteMessage},
     request::NetlinkRequest,
-    route::Route,
+    route::{self, Route},
     socket::NetlinkSocket,
     utils::zero_terminated,
 };
@@ -198,7 +198,7 @@ impl SocketHandle {
 
         req.add_data(link_info);
 
-        let _ = self.execute(&mut req, false)?;
+        let _ = self.execute(&mut req, 0)?;
 
         Ok(())
     }
@@ -216,7 +216,7 @@ impl SocketHandle {
 
         req.add_data(msg);
 
-        let _ = self.execute(&mut req, false)?;
+        let _ = self.execute(&mut req, 0)?;
 
         Ok(())
     }
@@ -239,7 +239,7 @@ impl SocketHandle {
             req.add_data(name);
         }
 
-        let msgs = self.execute(&mut req, false)?;
+        let msgs = self.execute(&mut req, 0)?;
 
         match msgs.len() {
             0 => bail!("no link found"),
@@ -262,7 +262,7 @@ impl SocketHandle {
 
         req.add_data(msg);
 
-        let _ = self.execute(&mut req, false)?;
+        let _ = self.execute(&mut req, 0)?;
 
         Ok(())
     }
@@ -339,7 +339,7 @@ impl SocketHandle {
             // TODO: add support for IFA_CACHEINFO
         }
 
-        let _ = self.execute(&mut req, false)?;
+        let _ = self.execute(&mut req, 0)?;
 
         Ok(())
     }
@@ -352,7 +352,7 @@ impl SocketHandle {
         let msg = Box::new(AddressMessage::new(family));
         req.add_data(msg);
 
-        let msgs = self.execute(&mut req, true)?;
+        let msgs = self.execute(&mut req, libc::RTM_NEWADDR)?;
         let mut res = vec![];
 
         for m in msgs {
@@ -375,9 +375,9 @@ impl SocketHandle {
 
         let mut attrs = vec![];
 
-        if proto != libc::RTM_GETROUTE || route.index > 0 {
+        if proto != libc::RTM_GETROUTE || route.oif_index > 0 {
             let mut b = [0; 4];
-            b.copy_from_slice(&route.index.to_ne_bytes());
+            b.copy_from_slice(&route.oif_index.to_ne_bytes());
             attrs.push(Box::new(NetlinkRouteAttr::new(libc::RTA_OIF, b.to_vec())));
         }
 
@@ -433,12 +433,44 @@ impl SocketHandle {
             req.add_data(attr);
         }
 
-        let _ = self.execute(&mut req, false)?;
+        let _ = self.execute(&mut req, 0)?;
 
         Ok(())
     }
 
-    fn execute(&mut self, req: &mut NetlinkRequest, multi: bool) -> Result<Vec<Vec<u8>>> {
+    pub fn route_get(&mut self, dst: &IpAddr) -> Result<Vec<Route>> {
+        let mut req = NetlinkRequest::new(libc::RTM_GETROUTE, libc::NLM_F_REQUEST);
+        let (family, dst_data, bit_len) = match dst {
+            IpAddr::V4(ip) => (libc::AF_INET, ip.octets().to_vec(), 32),
+            IpAddr::V6(ip) => (libc::AF_INET6, ip.octets().to_vec(), 128),
+        };
+
+        let mut msg = Box::new(RouteMessage {
+            ..Default::default()
+        });
+
+        msg.family = family as u8;
+        msg.dst_len = bit_len;
+        msg.flags = libc::RTM_F_LOOKUP_TABLE;
+
+        let rta_dst = Box::new(NetlinkRouteAttr::new(libc::RTA_DST, dst_data));
+
+        req.add_data(msg);
+        req.add_data(rta_dst);
+
+        let msgs = self.execute(&mut req, libc::RTM_NEWROUTE)?;
+
+        let mut res = vec![];
+
+        for m in msgs {
+            let route = route::route_deserialize(&m)?;
+            res.push(route);
+        }
+
+        Ok(res)
+    }
+
+    fn execute(&mut self, req: &mut NetlinkRequest, res_type: u16) -> Result<Vec<Vec<u8>>> {
         req.header.nlmsg_seq = {
             self.seq += 1;
             self.seq
@@ -464,11 +496,7 @@ impl SocketHandle {
 
             for m in msgs {
                 if m.header.nlmsg_seq != req.header.nlmsg_seq {
-                    bail!(
-                        "wrong sequence number: {}, expected: {}",
-                        m.header.nlmsg_seq,
-                        req.header.nlmsg_seq
-                    );
+                    continue;
                 }
 
                 if m.header.nlmsg_pid != pid {
@@ -486,13 +514,16 @@ impl SocketHandle {
                         let err_msg = unsafe { std::ffi::CStr::from_ptr(libc::strerror(-err_no)) };
                         bail!("{} ({}): {:?}", err_msg.to_str()?, -err_no, &m.data[4..]);
                     }
+                    t if res_type != 0 && t != res_type => {
+                        continue;
+                    }
                     _ => {
                         res.push(m.data);
                     }
                 }
 
-                if multi {
-                    continue;
+                if m.header.nlmsg_flags & libc::NLM_F_MULTI as u16 == 0 {
+                    break 'done;
                 }
             }
         }
@@ -709,7 +740,7 @@ mod tests {
         handle.link_setup(&*link).unwrap();
 
         let route = Route {
-            index: link.attrs().index,
+            oif_index: link.attrs().index,
             dst: Some("192.168.0.0/24".parse().unwrap()),
             src: Some("127.0.0.2".parse().unwrap()),
             ..Default::default()
@@ -722,6 +753,15 @@ mod tests {
                 libc::NLM_F_CREATE | libc::NLM_F_EXCL | libc::NLM_F_ACK,
             )
             .unwrap();
+
+        let routes = handle.route_get(&route.dst.unwrap().addr()).unwrap();
+
+        assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0].oif_index, link.attrs().index);
+        assert_eq!(
+            routes[0].dst.unwrap().network(),
+            route.dst.unwrap().network()
+        );
 
         // TODO
     }

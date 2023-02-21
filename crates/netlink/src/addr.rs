@@ -1,11 +1,12 @@
 use std::net::IpAddr;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use ipnet::IpNet;
 
 use crate::{
     message::{AddressMessage, NetlinkRouteAttr},
     request::NetlinkRequestData,
+    utils::vec_to_addr,
 };
 
 pub enum AddrCmd {
@@ -60,21 +61,4 @@ pub fn addr_deserialize(buf: &[u8]) -> Result<Address> {
     }
 
     Ok(addr)
-}
-
-pub fn vec_to_addr(vec: Vec<u8>) -> Result<IpAddr> {
-    // TODO: use IpAddr::parse_ascii when to be stable
-    match vec.len() {
-        4 => {
-            let buf: [u8; 4] = vec.try_into().unwrap();
-            Ok(IpAddr::from(buf))
-        }
-        16 => {
-            let buf: [u8; 16] = vec.try_into().unwrap();
-            Ok(IpAddr::from(buf))
-        }
-        _ => {
-            bail!("invalid address length: {}", vec.len())
-        }
-    }
 }
