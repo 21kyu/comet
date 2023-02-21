@@ -5,10 +5,11 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 
 use bencher::{benchmark_group, benchmark_main, Bencher};
 use netlink::{
-    addr, consts,
+    consts,
     link::link_deserialize,
     message::{InfoMessage, NetlinkRouteAttr},
     request::{NetlinkRequest, NetlinkRequestData},
+    utils,
 };
 
 fn bench_netlink_route_attr_serialize(b: &mut Bencher) {
@@ -180,10 +181,10 @@ fn bench_link_deserialize(b: &mut Bencher) {
 fn bench_vec_to_addr(b: &mut Bencher) {
     b.iter(|| {
         let addr_v4 = Ipv4Addr::LOCALHOST.octets().to_vec();
-        let _ = addr::vec_to_addr(addr_v4).unwrap();
+        let _ = utils::vec_to_addr(addr_v4).unwrap();
 
         let addr_v6 = Ipv6Addr::LOCALHOST.octets().to_vec();
-        let _ = addr::vec_to_addr(addr_v6).unwrap();
+        let _ = utils::vec_to_addr(addr_v6).unwrap();
     })
 }
 
