@@ -352,17 +352,12 @@ impl SocketHandle {
         let msg = Box::new(AddressMessage::new(family));
         req.add_data(msg);
 
-        let msgs = self.execute(&mut req, libc::RTM_NEWADDR)?;
-        let mut res = vec![];
-
-        for m in msgs {
-            let addr = addr::addr_deserialize(&m)?;
-            if addr.index == link.attrs().index {
-                res.push(addr);
-            }
-        }
-
-        Ok(res)
+        Ok(self
+            .execute(&mut req, libc::RTM_NEWADDR)?
+            .into_iter()
+            .filter_map(|m| addr::addr_deserialize(&m).ok())
+            .filter(|addr| addr.index == link.attrs().index)
+            .collect())
     }
 
     pub fn route_handle(&mut self, route: &Route, proto: u16, flags: i32) -> Result<()> {
@@ -458,16 +453,11 @@ impl SocketHandle {
         req.add_data(msg);
         req.add_data(rta_dst);
 
-        let msgs = self.execute(&mut req, libc::RTM_NEWROUTE)?;
-
-        let mut res = vec![];
-
-        for m in msgs {
-            let route = route::route_deserialize(&m)?;
-            res.push(route);
-        }
-
-        Ok(res)
+        Ok(self
+            .execute(&mut req, libc::RTM_NEWROUTE)?
+            .into_iter()
+            .filter_map(|m| route::route_deserialize(&m).ok())
+            .collect())
     }
 
     fn execute(&mut self, req: &mut NetlinkRequest, res_type: u16) -> Result<Vec<Vec<u8>>> {
@@ -763,6 +753,11 @@ mod tests {
             route.dst.unwrap().network()
         );
 
-        // TODO
+        handle
+            .route_handle(&route, libc::RTM_DELROUTE, libc::NLM_F_ACK)
+            .unwrap();
+
+        let res = handle.route_get(&route.dst.unwrap().addr()).err();
+        assert!(res.is_some());
     }
 }
