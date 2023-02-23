@@ -38,6 +38,24 @@ pub trait Link {
     fn kind(&self) -> &Kind;
 }
 
+impl<T: Link + ?Sized> Link for Box<T> {
+    fn link_type(&self) -> String {
+        (**self).link_type()
+    }
+
+    fn attrs(&self) -> &LinkAttrs {
+        (**self).attrs()
+    }
+
+    fn attrs_mut(&mut self) -> &mut LinkAttrs {
+        (**self).attrs_mut()
+    }
+
+    fn kind(&self) -> &Kind {
+        (**self).kind()
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct LinkAttrs {
     pub link_type: String,

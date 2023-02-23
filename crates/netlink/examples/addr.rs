@@ -21,22 +21,20 @@ fn main() {
         ..Default::default()
     };
 
-    netlink.addr_handle(AddrCmd::Add, &*link, &addr).unwrap();
+    netlink.addr_handle(AddrCmd::Add, &link, &addr).unwrap();
 
-    let result = netlink.addr_show(&*link).unwrap();
+    let result = netlink.addr_show(&link).unwrap();
     println!("{:?}", result);
 
     addr.ip = "127.0.0.3/24".parse().unwrap();
 
-    netlink
-        .addr_handle(AddrCmd::Replace, &*link, &addr)
-        .unwrap();
+    netlink.addr_handle(AddrCmd::Replace, &link, &addr).unwrap();
 
-    let result = netlink.addr_show(&*link).unwrap();
+    let result = netlink.addr_show(&link).unwrap();
     println!("{:?}", result);
 
-    netlink.addr_handle(AddrCmd::Del, &*link, &addr).unwrap();
+    netlink.addr_handle(AddrCmd::Del, &link, &addr).unwrap();
 
-    let result = netlink.addr_show(&*link).unwrap();
+    let result = netlink.addr_show(&link).unwrap();
     println!("{:?}", result);
 }

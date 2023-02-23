@@ -144,10 +144,7 @@ impl NetlinkRouteAttr {
         }
     }
 
-    pub fn add_child_from_attr<T>(&mut self, attr: Box<T>)
-    where
-        T: NetlinkRequestData + 'static,
-    {
+    pub fn add_child_from_attr(&mut self, attr: Box<(impl NetlinkRequestData + 'static)>) {
         self.rt_attr.rta_len += attr.len() as u16;
 
         match &mut self.children {
