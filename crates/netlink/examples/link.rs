@@ -22,12 +22,12 @@ fn link_add_modify_del() -> Result<()> {
     println!("link name: {}", link.attrs().name);
 
     link.attrs_mut().name = "bar".to_string();
-    netlink.link_modify(&*link)?;
+    netlink.link_modify(&link)?;
 
     let link = netlink.link_get(link.attrs())?;
     println!("link name: {}", link.attrs().name);
 
-    netlink.link_del(&*link)?;
+    netlink.link_del(&link)?;
 
     Ok(())
 }

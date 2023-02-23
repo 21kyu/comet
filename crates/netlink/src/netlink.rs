@@ -32,10 +32,7 @@ impl Netlink {
             .link_get(attr)
     }
 
-    pub fn link_add<T>(&mut self, link: &T) -> Result<()>
-    where
-        T: Link + ?Sized,
-    {
+    pub fn link_add(&mut self, link: &(impl Link + ?Sized)) -> Result<()> {
         let flags = libc::NLM_F_CREATE | libc::NLM_F_EXCL | libc::NLM_F_ACK;
         self.sockets
             .entry(libc::NETLINK_ROUTE)
@@ -43,50 +40,40 @@ impl Netlink {
             .link_new(link, flags)
     }
 
-    pub fn link_modify<T>(&mut self, link: &T) -> Result<()>
-    where
-        T: Link + ?Sized,
-    {
+    pub fn link_modify(&mut self, link: &(impl Link + ?Sized)) -> Result<()> {
         self.sockets
             .entry(libc::NETLINK_ROUTE)
             .or_insert(SocketHandle::new(libc::NETLINK_ROUTE)?)
             .link_new(link, libc::NLM_F_ACK)
     }
 
-    pub fn link_del<T>(&mut self, link: &T) -> Result<()>
-    where
-        T: Link + ?Sized,
-    {
+    pub fn link_del(&mut self, link: &(impl Link + ?Sized)) -> Result<()> {
         self.sockets
             .entry(libc::NETLINK_ROUTE)
             .or_insert(SocketHandle::new(libc::NETLINK_ROUTE)?)
             .link_del(link)
     }
 
-    pub fn link_setup<T>(&mut self, link: &T) -> Result<()>
-    where
-        T: Link + ?Sized,
-    {
+    pub fn link_setup(&mut self, link: &(impl Link + ?Sized)) -> Result<()> {
         self.sockets
             .entry(libc::NETLINK_ROUTE)
             .or_insert(SocketHandle::new(libc::NETLINK_ROUTE)?)
             .link_setup(link)
     }
 
-    pub fn addr_show<T>(&mut self, link: &T) -> Result<Vec<Address>>
-    where
-        T: Link + ?Sized,
-    {
+    pub fn addr_show(&mut self, link: &(impl Link + ?Sized)) -> Result<Vec<Address>> {
         self.sockets
             .entry(libc::NETLINK_ROUTE)
             .or_insert(SocketHandle::new(libc::NETLINK_ROUTE)?)
             .addr_show(link, libc::AF_UNSPEC)
     }
 
-    pub fn addr_handle<T>(&mut self, command: AddrCmd, link: &T, addr: &Address) -> Result<()>
-    where
-        T: Link + ?Sized,
-    {
+    pub fn addr_handle(
+        &mut self,
+        command: AddrCmd,
+        link: &(impl Link + ?Sized),
+        addr: &Address,
+    ) -> Result<()> {
         let (proto, flags) = match command {
             AddrCmd::Add => (
                 libc::RTM_NEWADDR,
@@ -177,12 +164,12 @@ mod tests {
         assert_eq!(link.link_type(), "dummy");
 
         link.attrs_mut().name = "bar".to_string();
-        netlink.link_modify(&*link).unwrap();
+        netlink.link_modify(&link).unwrap();
 
         let link = netlink.link_get(link.attrs()).unwrap();
         assert_eq!(link.attrs().name, "bar");
 
-        netlink.link_del(&*link).unwrap();
+        netlink.link_del(&link).unwrap();
 
         let link = netlink.link_get(link.attrs()).err();
         assert!(link.is_some());
@@ -207,26 +194,24 @@ mod tests {
             ..Default::default()
         };
 
-        netlink.addr_handle(AddrCmd::Add, &*link, &addr).unwrap();
+        netlink.addr_handle(AddrCmd::Add, &link, &addr).unwrap();
 
-        let res = netlink.addr_show(&*link).unwrap();
+        let res = netlink.addr_show(&link).unwrap();
         assert_eq!(res.len(), 1);
         assert_eq!(res[0].ip, addr.ip);
 
         addr.ip = "127.0.0.3/24".parse().unwrap();
 
-        netlink
-            .addr_handle(AddrCmd::Replace, &*link, &addr)
-            .unwrap();
+        netlink.addr_handle(AddrCmd::Replace, &link, &addr).unwrap();
 
-        let res = netlink.addr_show(&*link).unwrap();
+        let res = netlink.addr_show(&link).unwrap();
 
         assert_eq!(res.len(), 2);
         assert_eq!(res[1].ip, addr.ip);
 
-        netlink.addr_handle(AddrCmd::Del, &*link, &addr).unwrap();
+        netlink.addr_handle(AddrCmd::Del, &link, &addr).unwrap();
 
-        let res = netlink.addr_show(&*link).unwrap();
+        let res = netlink.addr_show(&link).unwrap();
         assert_eq!(res.len(), 1);
     }
 
@@ -242,7 +227,7 @@ mod tests {
 
         let link = netlink.link_get(&attr).unwrap();
 
-        netlink.link_setup(&*link).unwrap();
+        netlink.link_setup(&link).unwrap();
 
         let route = Route {
             oif_index: link.attrs().index,

@@ -27,10 +27,7 @@ impl SocketHandle {
         })
     }
 
-    pub fn link_new<T>(&mut self, link: &T, flags: i32) -> Result<()>
-    where
-        T: Link + ?Sized,
-    {
+    pub fn link_new(&mut self, link: &(impl Link + ?Sized), flags: i32) -> Result<()> {
         let base = link.attrs();
         let mut req = NetlinkRequest::new(libc::RTM_NEWLINK, flags);
         let mut msg = Box::new(InfoMessage::new(libc::AF_UNSPEC));
@@ -203,10 +200,7 @@ impl SocketHandle {
         Ok(())
     }
 
-    pub fn link_del<T>(&mut self, link: &T) -> Result<()>
-    where
-        T: Link + ?Sized,
-    {
+    pub fn link_del(&mut self, link: &(impl Link + ?Sized)) -> Result<()> {
         let base = link.attrs();
 
         let mut req = NetlinkRequest::new(libc::RTM_DELLINK, libc::NLM_F_ACK);
@@ -248,10 +242,7 @@ impl SocketHandle {
         }
     }
 
-    pub fn link_setup<T>(&mut self, link: &T) -> Result<()>
-    where
-        T: Link + ?Sized,
-    {
+    pub fn link_setup(&mut self, link: &(impl Link + ?Sized)) -> Result<()> {
         let mut req = NetlinkRequest::new(libc::RTM_NEWLINK, libc::NLM_F_ACK);
         let base = link.attrs();
 
@@ -267,10 +258,13 @@ impl SocketHandle {
         Ok(())
     }
 
-    pub fn addr_handle<T>(&mut self, link: &T, addr: &Address, proto: u16, flags: i32) -> Result<()>
-    where
-        T: Link + ?Sized,
-    {
+    pub fn addr_handle(
+        &mut self,
+        link: &(impl Link + ?Sized),
+        addr: &Address,
+        proto: u16,
+        flags: i32,
+    ) -> Result<()> {
         let mut req = NetlinkRequest::new(proto, flags);
         let base = link.attrs();
         let mut index: i32 = base.index;
@@ -344,10 +338,7 @@ impl SocketHandle {
         Ok(())
     }
 
-    pub fn addr_show<T>(&mut self, link: &T, family: i32) -> Result<Vec<Address>>
-    where
-        T: Link + ?Sized,
-    {
+    pub fn addr_show(&mut self, link: &(impl Link + ?Sized), family: i32) -> Result<Vec<Address>> {
         let mut req = NetlinkRequest::new(libc::RTM_GETADDR, libc::NLM_F_DUMP);
         let msg = Box::new(AddressMessage::new(family));
         req.add_data(msg);
@@ -569,7 +560,7 @@ mod tests {
         let link = handle.link_get(&attr).unwrap();
         assert_eq!(link.attrs().name, "bar");
 
-        handle.link_del(&*link).unwrap();
+        handle.link_del(&link).unwrap();
 
         let res = handle.link_get(&attr).err();
         println!("{res:?}");
@@ -618,7 +609,7 @@ mod tests {
             _ => panic!("wrong link type"),
         }
 
-        handle.link_del(&*link).unwrap();
+        handle.link_del(&link).unwrap();
 
         let res = handle.link_get(&attr).err();
         assert!(res.is_some());
@@ -673,7 +664,7 @@ mod tests {
         assert_eq!(peer.attrs().num_tx_queues, 4);
         assert_eq!(peer.attrs().num_rx_queues, 8);
 
-        handle.link_del(&*peer).unwrap();
+        handle.link_del(&peer).unwrap();
 
         let res = handle.link_get(&attr).err();
         assert!(res.is_some());
@@ -710,9 +701,9 @@ mod tests {
         let proto = libc::RTM_NEWADDR;
         let flags = libc::NLM_F_CREATE | libc::NLM_F_EXCL | libc::NLM_F_ACK;
 
-        handle.addr_handle(&*link, &addr, proto, flags).unwrap();
+        handle.addr_handle(&link, &addr, proto, flags).unwrap();
 
-        let addrs = handle.addr_show(&*link, libc::AF_UNSPEC).unwrap();
+        let addrs = handle.addr_show(&link, libc::AF_UNSPEC).unwrap();
 
         assert_eq!(addrs.len(), 1);
         assert_eq!(addrs[0].ip, address);
@@ -727,7 +718,7 @@ mod tests {
 
         let link = handle.link_get(&attr).unwrap();
 
-        handle.link_setup(&*link).unwrap();
+        handle.link_setup(&link).unwrap();
 
         let route = Route {
             oif_index: link.attrs().index,
